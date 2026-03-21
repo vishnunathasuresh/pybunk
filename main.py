@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from datetime import datetime
@@ -17,6 +18,14 @@ UNSURE_CSV = Path("unsure.csv")
 REQUEST_TIMEOUT = 60
 
 load_dotenv()
+
+LOG_LEVEL = os.getenv("PYBUNK_LOG_LEVEL", "INFO").upper()
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 USERNAME = os.getenv("PYBUNK_USERNAME", "")
 PASSWORD = os.getenv("PYBUNK_PASSWORD", "")
@@ -156,7 +165,7 @@ def login() -> None:
     if "/my/" not in response.url and "dashboard" not in response.url:
         raise RuntimeError("Login failed. Check username/password or login flow.")
 
-    print("Logged in successfully")
+    logger.info("Logged in successfully")
 
 
 def get_sesskey() -> str:
@@ -298,8 +307,8 @@ def _export_score_csvs(dataframe: pd.DataFrame) -> None:
     leaves.to_csv(LEAVES_CSV, index=False)
     unsure.to_csv(UNSURE_CSV, index=False)
 
-    print(f"\nWrote {len(leaves)} rows to {LEAVES_CSV.resolve()}")
-    print(f"Wrote {len(unsure)} rows to {UNSURE_CSV.resolve()}")
+    logger.info("Wrote %s rows to %s", len(leaves), LEAVES_CSV.resolve())
+    logger.info("Wrote %s rows to %s", len(unsure), UNSURE_CSV.resolve())
 
 
 def main() -> pd.DataFrame:
@@ -315,11 +324,11 @@ def main() -> pd.DataFrame:
             course.get("fullname") or course.get("shortname") or str(course_id)
         )
 
-        print(f"Processing: {course_name}")
+        logger.info("Processing course: %s", course_name)
 
         module_id = get_attendance_module(course_id)
         if not module_id:
-            print("  No attendance module found")
+            logger.warning("No attendance module found for %s", course_name)
             continue
 
         for record in get_attendance(module_id):
@@ -348,8 +357,7 @@ def main() -> pd.DataFrame:
 
     _export_score_csvs(dataframe)
 
-    print("\nFinal DataFrame:")
-    print(dataframe)
+    logger.info("Final DataFrame:\n%s", dataframe)
 
     return dataframe
 
