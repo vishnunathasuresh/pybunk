@@ -15,6 +15,8 @@ BASE_URL = "https://lmsug24.iiitkottayam.ac.in"
 CUTOFF_DATE = datetime.strptime("17-03-2026", "%d-%m-%Y").date()
 LEAVES_CSV = Path("leaves.csv")
 UNSURE_CSV = Path("unsure.csv")
+LEAVES_TXT = Path("leaves.txt")
+UNSURE_TXT = Path("unsure.txt")
 REQUEST_TIMEOUT = 60
 
 load_dotenv()
@@ -80,6 +82,13 @@ def _normalize_whitespace(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def _split_course_name(course_name: str) -> tuple[str, str]:
+    parts = _normalize_whitespace(course_name).split(maxsplit=1)
+    course_code = parts[0] if parts else ""
+    subject_name = parts[1] if len(parts) > 1 else ""
+    return course_code, subject_name
+
+
 def _extract_score(status_text: str) -> str | None:
     match = re.search(r"(\?|\d+)\s*/\s*(\d+)", status_text)
     if not match:
@@ -118,6 +127,30 @@ def _format_session_time(session_time: str) -> str:
     formatted = re.sub(r"\s+", " ", session_time.strip().upper())
     formatted = re.sub(r"(?<=\d)\s*(AM|PM)", lambda match: match.group(1).lower(), formatted)
     return formatted.replace(" - ", " - ").lower()
+
+
+def _format_session_time_text(session_time: str) -> str:
+    return re.sub(r"\s+", " ", session_time.strip().upper())
+
+
+def _extract_session_start(session_time: str) -> pd.Timestamp | None:
+    start_time = session_time.split("-", maxsplit=1)[0].strip().upper()
+    parsed_time = pd.to_datetime(start_time, format="%I:%M%p", errors="coerce")
+    if pd.isna(parsed_time):
+        parsed_time = pd.to_datetime(start_time, format="%I%p", errors="coerce")
+    if pd.isna(parsed_time):
+        return None
+    return parsed_time
+
+
+def _clean_participant_name(raw_name: str) -> str:
+    cleaned = _normalize_whitespace(raw_name)
+    select_match = re.search(r"Select '(.+)'", cleaned)
+    if select_match:
+        cleaned = select_match.group(1)
+
+    cleaned = re.sub(r"^[A-Z0-9.-]+\s+(?=[A-Za-z])", "", cleaned)
+    return _normalize_whitespace(cleaned)
 
 
 def _find_attendance_table(soup: BeautifulSoup):
@@ -292,12 +325,53 @@ def get_attendance(module_id: int | str) -> list[dict[str, Any]]:
     return records
 
 
+def get_course_faculty(course_id: int | str) -> str:
+    response = session.get(
+        f"{BASE_URL}/user/index.php?id={course_id}&perpage=5000",
+        timeout=REQUEST_TIMEOUT,
+    )
+    _ensure_success(response, f"Loading participants page for course {course_id}")
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    teacher_roles = {"Teacher", "Non-editing teacher"}
+    clean_names: list[str] = []
+    preferred_names: list[str] = []
+
+    for row in soup.find_all("tr"):
+        values = [_normalize_text(cell) for cell in row.find_all("td")]
+        if len(values) < 4:
+            continue
+
+        participant_name, role_name = values[0], values[1]
+        if role_name not in teacher_roles or not participant_name.strip():
+            continue
+
+        cleaned_name = _clean_participant_name(participant_name)
+        if cleaned_name:
+            clean_names.append(cleaned_name)
+            if not re.search(r"\d", participant_name):
+                preferred_names.append(cleaned_name)
+
+    unique_names = list(dict.fromkeys(clean_names))
+    unique_preferred_names = list(dict.fromkeys(preferred_names))
+    chosen_names = unique_preferred_names or unique_names
+
+    if not chosen_names:
+        return "Unknown Faculty"
+
+    return ", ".join(chosen_names)
+
+
 def _export_score_csvs(dataframe: pd.DataFrame) -> None:
     export_columns = ["date", "session_time", "course"]
     filtered = dataframe.loc[dataframe["period_date"].notna()].copy()
     filtered = filtered.loc[filtered["period_date"].dt.date <= CUTOFF_DATE].copy()
 
-    filtered = filtered.sort_values(by=["course", "period_date", "session_time"])
+    filtered["session_start"] = filtered["session_time"].map(_extract_session_start)
+    filtered = filtered.sort_values(
+        by=["period_date", "session_start", "course"],
+        na_position="last",
+    )
     filtered["date"] = filtered["period_date"].dt.strftime("%d-%m-%Y")
     filtered["session_time"] = filtered["session_time"].map(_format_session_time)
 
@@ -309,6 +383,53 @@ def _export_score_csvs(dataframe: pd.DataFrame) -> None:
 
     logger.info("Wrote %s rows to %s", len(leaves), LEAVES_CSV.resolve())
     logger.info("Wrote %s rows to %s", len(unsure), UNSURE_CSV.resolve())
+
+
+def _write_daywise_text(path: Path, dataframe: pd.DataFrame) -> None:
+    if dataframe.empty:
+        path.write_text("", encoding="utf-8")
+        logger.info("Wrote 0 rows to %s", path.resolve())
+        return
+
+    lines: list[str] = []
+    grouped = dataframe.groupby("date", sort=False)
+
+    for index, (date_text, group) in enumerate(grouped):
+        if index > 0:
+            lines.append("----")
+        lines.append(date_text)
+
+        for row in group.itertuples(index=False):
+            lines.append(
+                f"{_format_session_time_text(row.session_time)} : "
+                f"{row.course_code} : {row.subject_name} : {row.faculty}"
+            )
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    logger.info("Wrote %s rows to %s", len(dataframe), path.resolve())
+
+
+def _export_score_texts(dataframe: pd.DataFrame) -> None:
+    filtered = dataframe.loc[dataframe["period_date"].notna()].copy()
+    filtered = filtered.loc[filtered["period_date"].dt.date <= CUTOFF_DATE].copy()
+    filtered["session_start"] = filtered["session_time"].map(_extract_session_start)
+    filtered = filtered.sort_values(
+        by=["period_date", "session_start", "course_code", "subject_name"],
+        na_position="last",
+    )
+    filtered["date"] = filtered["period_date"].dt.strftime("%d-%m-%Y")
+
+    leaves = filtered.loc[
+        filtered["score"] == "0/1",
+        ["date", "session_time", "course_code", "subject_name", "faculty"],
+    ].reset_index(drop=True)
+    unsure = filtered.loc[
+        filtered["score"] == "?/1",
+        ["date", "session_time", "course_code", "subject_name", "faculty"],
+    ].reset_index(drop=True)
+
+    _write_daywise_text(LEAVES_TXT, leaves)
+    _write_daywise_text(UNSURE_TXT, unsure)
 
 
 def main() -> pd.DataFrame:
@@ -323,6 +444,7 @@ def main() -> pd.DataFrame:
         course_name = _normalize_whitespace(
             course.get("fullname") or course.get("shortname") or str(course_id)
         )
+        course_code, subject_name = _split_course_name(course_name)
 
         logger.info("Processing course: %s", course_name)
 
@@ -331,14 +453,22 @@ def main() -> pd.DataFrame:
             logger.warning("No attendance module found for %s", course_name)
             continue
 
+        faculty = get_course_faculty(course_id)
+
         for record in get_attendance(module_id):
             record["course"] = course_name
+            record["course_code"] = course_code
+            record["subject_name"] = subject_name
+            record["faculty"] = faculty
             record["course_id"] = course_id
             record["attendance_module_id"] = module_id
             all_data.append(record)
 
     columns = [
         "course",
+        "course_code",
+        "subject_name",
+        "faculty",
         "course_id",
         "attendance_module_id",
         "period_date",
@@ -356,6 +486,7 @@ def main() -> pd.DataFrame:
         dataframe["period_date"] = pd.to_datetime(dataframe["period_date"], errors="coerce")
 
     _export_score_csvs(dataframe)
+    _export_score_texts(dataframe)
 
     logger.info("Final DataFrame:\n%s", dataframe)
 
