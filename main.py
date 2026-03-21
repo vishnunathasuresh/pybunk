@@ -1,5 +1,7 @@
 import os
 import re
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
@@ -9,6 +11,10 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 BASE_URL = "https://lmsug24.iiitkottayam.ac.in"
+CUTOFF_DATE = datetime.strptime("17-03-2026", "%d-%m-%Y").date()
+LEAVES_CSV = Path("leaves.csv")
+UNSURE_CSV = Path("unsure.csv")
+REQUEST_TIMEOUT = 60
 
 load_dotenv()
 
@@ -61,14 +67,48 @@ def _normalize_text(cell: Any) -> str:
     return cell.get_text(" ", strip=True) if cell else ""
 
 
+def _normalize_whitespace(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _extract_score(status_text: str) -> str | None:
+    match = re.search(r"(\?|\d+)\s*/\s*(\d+)", status_text)
+    if not match:
+        return None
+
+    earned_text, total_text = match.groups()
+    return f"{earned_text}/{total_text}"
+
+
 def _extract_points(status_text: str) -> tuple[int | None, int | None]:
-    match = re.search(r"\((\?|\d+)\s*/\s*(\d+)\)", status_text)
+    match = re.search(r"(\?|\d+)\s*/\s*(\d+)", status_text)
     if not match:
         return None, None
 
     earned_text, total_text = match.groups()
     earned = None if earned_text == "?" else int(earned_text)
     return earned, int(total_text)
+
+
+def _split_period_datetime(period_text: str) -> tuple[pd.Timestamp | None, str]:
+    match = re.search(
+        r"^(?P<date_text>.+?\d{4})\s+(?P<session_time>\d{1,2}(?::\d{2})?[AP]M\s*-\s*\d{1,2}(?::\d{2})?[AP]M)$",
+        period_text,
+        re.IGNORECASE,
+    )
+    if not match:
+        return pd.NaT, ""
+
+    date_text = match.group("date_text")
+    session_time = match.group("session_time").upper().strip()
+    parsed_date = pd.to_datetime(date_text, format="%a %d %b %Y", errors="coerce")
+    return parsed_date, session_time
+
+
+def _format_session_time(session_time: str) -> str:
+    formatted = re.sub(r"\s+", " ", session_time.strip().upper())
+    formatted = re.sub(r"(?<=\d)\s*(AM|PM)", lambda match: match.group(1).lower(), formatted)
+    return formatted.replace(" - ", " - ").lower()
 
 
 def _find_attendance_table(soup: BeautifulSoup):
@@ -86,7 +126,7 @@ def _find_attendance_table(soup: BeautifulSoup):
 
 
 def get_login_token() -> str:
-    response = session.get(f"{BASE_URL}/login/index.php", timeout=30)
+    response = session.get(f"{BASE_URL}/login/index.php", timeout=REQUEST_TIMEOUT)
     _ensure_success(response, "Fetching login page")
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -109,7 +149,7 @@ def login() -> None:
     response = session.post(
         f"{BASE_URL}/login/index.php",
         data=payload,
-        timeout=30,
+        timeout=REQUEST_TIMEOUT,
     )
     _ensure_success(response, "Logging in")
 
@@ -120,7 +160,7 @@ def login() -> None:
 
 
 def get_sesskey() -> str:
-    response = session.get(f"{BASE_URL}/my/", timeout=30)
+    response = session.get(f"{BASE_URL}/my/", timeout=REQUEST_TIMEOUT)
     _ensure_success(response, "Loading dashboard")
     return _extract_sesskey(response.text)
 
@@ -147,7 +187,7 @@ def get_courses(sesskey: str) -> list[dict[str, Any]]:
         ),
         json=payload,
         headers=AJAX_HEADERS,
-        timeout=30,
+        timeout=REQUEST_TIMEOUT,
     )
     _ensure_success(response, "Fetching enrolled courses")
 
@@ -171,7 +211,10 @@ def get_courses(sesskey: str) -> list[dict[str, Any]]:
 
 
 def get_attendance_module(course_id: int | str) -> str | None:
-    response = session.get(f"{BASE_URL}/course/view.php?id={course_id}", timeout=30)
+    response = session.get(
+        f"{BASE_URL}/course/view.php?id={course_id}",
+        timeout=REQUEST_TIMEOUT,
+    )
     _ensure_success(response, f"Loading course page for course {course_id}")
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -192,7 +235,7 @@ def get_attendance_module(course_id: int | str) -> str | None:
 def get_attendance(module_id: int | str) -> list[dict[str, Any]]:
     response = session.get(
         f"{BASE_URL}/mod/attendance/view.php?id={module_id}&view=5",
-        timeout=30,
+        timeout=REQUEST_TIMEOUT,
     )
     _ensure_success(response, f"Loading attendance report for module {module_id}")
 
@@ -219,20 +262,44 @@ def get_attendance(module_id: int | str) -> list[dict[str, Any]]:
         period_date = values[0]
         description = values[1] if len(values) >= 4 else ""
         status = values[2] if len(values) == 3 else values[3]
+        attendance_date, session_time = _split_period_datetime(period_date)
+        score = _extract_score(status)
 
         points_earned, points_total = _extract_points(status)
 
         records.append(
             {
-                "period_date": period_date,
+                "period_date": attendance_date,
+                "period_text": period_date,
+                "session_time": session_time,
                 "description": description,
                 "status": status,
+                "score": score,
                 "points_earned": points_earned,
                 "points_total": points_total,
             }
         )
 
     return records
+
+
+def _export_score_csvs(dataframe: pd.DataFrame) -> None:
+    export_columns = ["date", "session_time", "course"]
+    filtered = dataframe.loc[dataframe["period_date"].notna()].copy()
+    filtered = filtered.loc[filtered["period_date"].dt.date <= CUTOFF_DATE].copy()
+
+    filtered = filtered.sort_values(by=["period_date", "session_time", "course"])
+    filtered["date"] = filtered["period_date"].dt.strftime("%d-%m-%Y")
+    filtered["session_time"] = filtered["session_time"].map(_format_session_time)
+
+    leaves = filtered.loc[filtered["score"] == "0/1", export_columns].reset_index(drop=True)
+    unsure = filtered.loc[filtered["score"] == "?/1", export_columns].reset_index(drop=True)
+
+    leaves.to_csv(LEAVES_CSV, index=False)
+    unsure.to_csv(UNSURE_CSV, index=False)
+
+    print(f"\nWrote {len(leaves)} rows to {LEAVES_CSV.resolve()}")
+    print(f"Wrote {len(unsure)} rows to {UNSURE_CSV.resolve()}")
 
 
 def main() -> pd.DataFrame:
@@ -244,7 +311,9 @@ def main() -> pd.DataFrame:
 
     for course in courses:
         course_id = course.get("id")
-        course_name = course.get("fullname") or course.get("shortname") or str(course_id)
+        course_name = _normalize_whitespace(
+            course.get("fullname") or course.get("shortname") or str(course_id)
+        )
 
         print(f"Processing: {course_name}")
 
@@ -264,19 +333,20 @@ def main() -> pd.DataFrame:
         "course_id",
         "attendance_module_id",
         "period_date",
+        "period_text",
+        "session_time",
         "description",
         "status",
+        "score",
         "points_earned",
         "points_total",
     ]
     dataframe = pd.DataFrame(all_data, columns=columns)
 
     if not dataframe.empty:
-        dataframe["period_date"] = pd.to_datetime(
-            dataframe["period_date"],
-            errors="coerce",
-            format="mixed",
-        )
+        dataframe["period_date"] = pd.to_datetime(dataframe["period_date"], errors="coerce")
+
+    _export_score_csvs(dataframe)
 
     print("\nFinal DataFrame:")
     print(dataframe)
