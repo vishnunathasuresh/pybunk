@@ -288,7 +288,7 @@ def _export_score_csvs(dataframe: pd.DataFrame) -> None:
     filtered = dataframe.loc[dataframe["period_date"].notna()].copy()
     filtered = filtered.loc[filtered["period_date"].dt.date <= CUTOFF_DATE].copy()
 
-    filtered = filtered.sort_values(by=["period_date", "session_time", "course"])
+    filtered = filtered.sort_values(by=["course", "period_date", "session_time"])
     filtered["date"] = filtered["period_date"].dt.strftime("%d-%m-%Y")
     filtered["session_time"] = filtered["session_time"].map(_format_session_time)
 
