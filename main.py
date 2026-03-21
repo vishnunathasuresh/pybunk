@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
@@ -17,7 +17,25 @@ LEAVES_CSV = Path("leaves.csv")
 UNSURE_CSV = Path("unsure.csv")
 LEAVES_TXT = Path("leaves.txt")
 UNSURE_TXT = Path("unsure.txt")
+DUTY_LEAVES_TXT = Path("duty_leaves.txt")
 REQUEST_TIMEOUT = 60
+MAX_DUTY_LEAVES_PER_COURSE = 8
+MAX_DAYS_BEFORE_EVENT = 4
+EVENT_DATES = [
+    ("Freshers Interviews", date(2026, 1, 14)),
+    ("Freshers Interviews", date(2026, 1, 19)),
+    ("Freshers Interviews", date(2026, 1, 20)),
+    ("ChAi Talks", date(2026, 1, 24)),
+    ("ChAi Talks", date(2026, 1, 30)),
+    ("Turing Birthday Events", date(2026, 2, 4)),
+    ("Turing Birthday Events", date(2026, 2, 5)),
+    ("Turing Birthday Events", date(2026, 2, 6)),
+    ("Turing Birthday Events", date(2026, 2, 11)),
+    ("ChAi Talks", date(2026, 2, 26)),
+    ("ChAi Talks", date(2026, 3, 5)),
+    ("Apoorv", date(2026, 3, 13)),
+    ("Apoorv", date(2026, 3, 14)),
+]
 
 load_dotenv()
 
@@ -151,6 +169,20 @@ def _clean_participant_name(raw_name: str) -> str:
 
     cleaned = re.sub(r"^[A-Z0-9.-]+\s+(?=[A-Za-z])", "", cleaned)
     return _normalize_whitespace(cleaned)
+
+
+def _match_upcoming_event(leave_date: date) -> tuple[str, date, int] | None:
+    matches: list[tuple[str, date, int]] = []
+
+    for event_name, event_date in EVENT_DATES:
+        days_before = (event_date - leave_date).days
+        if 0 <= days_before <= MAX_DAYS_BEFORE_EVENT:
+            matches.append((event_name, event_date, days_before))
+
+    if not matches:
+        return None
+
+    return min(matches, key=lambda item: (item[2], item[1], item[0]))
 
 
 def _find_attendance_table(soup: BeautifulSoup):
@@ -409,6 +441,43 @@ def _write_daywise_text(path: Path, dataframe: pd.DataFrame) -> None:
     logger.info("Wrote %s rows to %s", len(dataframe), path.resolve())
 
 
+def _write_duty_leaves_text(path: Path, dataframe: pd.DataFrame) -> None:
+    if dataframe.empty:
+        path.write_text("", encoding="utf-8")
+        logger.info("Wrote 0 rows to %s", path.resolve())
+        return
+
+    lines: list[str] = []
+    grouped = dataframe.groupby("date", sort=False)
+
+    for index, (date_text, group) in enumerate(grouped):
+        if index > 0:
+            lines.append("----")
+        lines.append(date_text)
+
+        for row in group.itertuples(index=False):
+            lines.append(
+                f"{_format_session_time_text(row.session_time)} : "
+                f"{row.course_code} : {row.subject_name} : {row.faculty}"
+            )
+
+    lines.append("----")
+    lines.append("DL Count By Course")
+
+    counts = (
+        dataframe.groupby(["course_code", "subject_name"], sort=True)
+        .size()
+        .reset_index(name="count")
+        .sort_values(by=["course_code", "subject_name"])
+    )
+
+    for row in counts.itertuples(index=False):
+        lines.append(f"{row.course_code} : {row.subject_name} : {row.count}")
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    logger.info("Wrote %s rows to %s", len(dataframe), path.resolve())
+
+
 def _export_score_texts(dataframe: pd.DataFrame) -> None:
     filtered = dataframe.loc[dataframe["period_date"].notna()].copy()
     filtered = filtered.loc[filtered["period_date"].dt.date <= CUTOFF_DATE].copy()
@@ -430,6 +499,46 @@ def _export_score_texts(dataframe: pd.DataFrame) -> None:
 
     _write_daywise_text(LEAVES_TXT, leaves)
     _write_daywise_text(UNSURE_TXT, unsure)
+
+
+def _export_duty_leaves_text(dataframe: pd.DataFrame) -> None:
+    filtered = dataframe.loc[dataframe["period_date"].notna()].copy()
+    filtered = filtered.loc[filtered["period_date"].dt.date <= CUTOFF_DATE].copy()
+    filtered = filtered.loc[filtered["score"] == "0/1"].copy()
+    filtered["event_match"] = filtered["period_date"].dt.date.map(_match_upcoming_event)
+    filtered = filtered.loc[filtered["event_match"].notna()].copy()
+
+    if filtered.empty:
+        DUTY_LEAVES_TXT.write_text("", encoding="utf-8")
+        logger.info("Wrote 0 rows to %s", DUTY_LEAVES_TXT.resolve())
+        return
+
+    filtered["matched_event_name"] = filtered["event_match"].map(lambda item: item[0])
+    filtered["matched_event_date"] = filtered["event_match"].map(lambda item: item[1])
+    filtered["days_before_event"] = filtered["event_match"].map(lambda item: item[2])
+    filtered["session_start"] = filtered["session_time"].map(_extract_session_start)
+    filtered = filtered.sort_values(
+        by=[
+            "course_code",
+            "days_before_event",
+            "matched_event_date",
+            "period_date",
+            "session_start",
+            "subject_name",
+        ],
+        na_position="last",
+    )
+    filtered = filtered.groupby("course_code", group_keys=False).head(MAX_DUTY_LEAVES_PER_COURSE)
+    filtered = filtered.sort_values(
+        by=["period_date", "session_start", "course_code", "subject_name"],
+        na_position="last",
+    )
+    filtered["date"] = filtered["period_date"].dt.strftime("%d-%m-%Y")
+
+    output = filtered[
+        ["date", "session_time", "course_code", "subject_name", "faculty"]
+    ].reset_index(drop=True)
+    _write_duty_leaves_text(DUTY_LEAVES_TXT, output)
 
 
 def main() -> pd.DataFrame:
@@ -487,6 +596,7 @@ def main() -> pd.DataFrame:
 
     _export_score_csvs(dataframe)
     _export_score_texts(dataframe)
+    _export_duty_leaves_text(dataframe)
 
     logger.info("Final DataFrame:\n%s", dataframe)
 
