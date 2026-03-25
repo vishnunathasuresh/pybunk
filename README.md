@@ -36,6 +36,27 @@ uv sync
 uv run main.py
 ```
 
+## Interactive Planner
+
+To plan duty leaves interactively with a calendar UI:
+
+```powershell
+uv run streamlit run streamlit_app.py
+```
+
+The Streamlit planner lets you:
+
+- enter your Moodle roll number and password directly in the UI
+- fetch the latest attendance from Moodle
+- select event dates on a calendar-style date picker
+- add manual bunk dates and courses when LMS is not updated
+- tick `?/1` rows as `not marked` bunks so they count in the plan
+- set per-course maximum DL counts
+- generate and download an interactive DL recommendation plan
+- write planner outputs locally as `interactive_duty_leaves.txt` and `interactive_duty_leaves.csv`
+
+If you leave the event-date list empty, the planner generates a plan from all available bunks instead of maximizing around specific events.
+
 ## Generated Files
 
 Running `main.py` writes these files to the project root:
@@ -53,6 +74,10 @@ Running `main.py` writes these files to the project root:
 - `duty_leaves.txt`
   - Suggested duty-leave entries derived from configured event dates
   - Appends `DL Count By Course` at the end
+- `interactive_duty_leaves.txt`
+  - Planner-generated duty-leave output from the Streamlit UI
+- `interactive_duty_leaves.csv`
+  - Planner-generated tabular duty-leave output from the Streamlit UI
 
 ## Duty Leave Logic
 

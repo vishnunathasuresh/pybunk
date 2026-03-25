@@ -77,6 +77,22 @@ def _ensure_success(response: requests.Response, context: str) -> None:
         raise RuntimeError(f"{context} failed with {response.status_code}") from exc
 
 
+def _resolve_credentials(
+    username: str | None = None,
+    password: str | None = None,
+) -> tuple[str, str]:
+    resolved_username = username if username is not None else USERNAME
+    resolved_password = password if password is not None else PASSWORD
+
+    if not resolved_username or not resolved_password:
+        raise RuntimeError(
+            "Missing Moodle credentials. Provide them in the UI or set "
+            "PYBUNK_USERNAME and PYBUNK_PASSWORD."
+        )
+
+    return resolved_username, resolved_password
+
+
 def _extract_sesskey(html: str) -> str:
     patterns = [
         r'"sesskey":"([^"]+)"',
@@ -254,13 +270,14 @@ def get_login_token() -> str:
     return token_input["value"]
 
 
-def login() -> None:
+def login(username: str | None = None, password: str | None = None) -> None:
+    resolved_username, resolved_password = _resolve_credentials(username, password)
     token = get_login_token()
     payload = {
         "anchor": "",
         "logintoken": token,
-        "username": USERNAME,
-        "password": PASSWORD,
+        "username": resolved_username,
+        "password": resolved_password,
     }
 
     response = session.post(
@@ -602,8 +619,12 @@ def _export_duty_leaves_text(dataframe: pd.DataFrame) -> None:
     _write_duty_leaves_text(DUTY_LEAVES_TXT, output)
 
 
-def main() -> pd.DataFrame:
-    login()
+def fetch_attendance_dataframe(
+    username: str | None = None,
+    password: str | None = None,
+) -> pd.DataFrame:
+    profile_email_cache.clear()
+    login(username=username, password=password)
     sesskey = get_sesskey()
     courses = get_courses(sesskey)
 
@@ -657,9 +678,22 @@ def main() -> pd.DataFrame:
     if not dataframe.empty:
         dataframe["period_date"] = pd.to_datetime(dataframe["period_date"], errors="coerce")
 
+    return dataframe
+
+
+def export_reports(dataframe: pd.DataFrame) -> None:
+    if dataframe.empty:
+        logger.warning("No attendance data found to export")
+        return
+
     _export_score_csvs(dataframe)
     _export_score_texts(dataframe)
     _export_duty_leaves_text(dataframe)
+
+
+def main() -> pd.DataFrame:
+    dataframe = fetch_attendance_dataframe()
+    export_reports(dataframe)
 
     logger.info("Final DataFrame:\n%s", dataframe)
 
