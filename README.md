@@ -36,6 +36,32 @@ uv sync
 uv run main.py
 ```
 
+## API
+
+To run the backend API:
+
+```powershell
+uv run uvicorn api:app --reload
+```
+
+Available endpoints:
+
+- `GET /api/health`
+- `POST /api/attendance/fetch`
+- `POST /api/planner/generate`
+
+The API supports the same planner features as the Streamlit UI:
+
+- LMS attendance fetch with username and password
+- event-date-driven DL planning
+- no-event fallback that plans from all bunks
+- manual bunk entries
+- selected `?/1` rows as `not marked` bunks
+- per-course DL caps
+- planner text output plus per-course counts
+
+For full request and response details, see [API.md](API.md).
+
 ## Interactive Planner
 
 To plan duty leaves interactively with a calendar UI:
