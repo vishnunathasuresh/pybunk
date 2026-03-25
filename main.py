@@ -2,9 +2,10 @@ import logging
 import os
 import re
 from datetime import date, datetime
+from html import unescape
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import pandas as pd
 import requests
@@ -66,6 +67,7 @@ AJAX_HEADERS = {
 
 session = requests.Session()
 session.headers.update(DEFAULT_HEADERS)
+profile_email_cache: dict[int, str] = {}
 
 
 def _ensure_success(response: requests.Response, context: str) -> None:
@@ -169,6 +171,47 @@ def _clean_participant_name(raw_name: str) -> str:
 
     cleaned = re.sub(r"^[A-Z0-9.-]+\s+(?=[A-Za-z])", "", cleaned)
     return _normalize_whitespace(cleaned)
+
+
+def _extract_user_id_from_url(url: str) -> int | None:
+    query = parse_qs(urlparse(url).query)
+    user_ids = query.get("id")
+    if not user_ids or not user_ids[0].isdigit():
+        return None
+    return int(user_ids[0])
+
+
+def _extract_email_from_profile_html(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    label = soup.find("dt", string=lambda text: text and "email address" in text.lower())
+    if not label:
+        return ""
+
+    value = label.find_next("dd")
+    if not value:
+        return ""
+
+    link = value.find("a", href=True)
+    if link and "mailto:" in unescape(link["href"]):
+        href = unescape(link["href"])
+        return unquote(href.split("mailto:", maxsplit=1)[1].strip())
+
+    return _normalize_whitespace(value.get_text(" ", strip=True))
+
+
+def get_faculty_email(profile_url: str) -> str:
+    user_id = _extract_user_id_from_url(profile_url)
+    if user_id is None:
+        return ""
+
+    if user_id in profile_email_cache:
+        return profile_email_cache[user_id]
+
+    response = session.get(profile_url, timeout=REQUEST_TIMEOUT)
+    _ensure_success(response, f"Loading faculty profile {profile_url}")
+    email = _extract_email_from_profile_html(response.text)
+    profile_email_cache[user_id] = email
+    return email
 
 
 def _match_upcoming_event(leave_date: date) -> tuple[str, date, int] | None:
@@ -357,7 +400,7 @@ def get_attendance(module_id: int | str) -> list[dict[str, Any]]:
     return records
 
 
-def get_course_faculty(course_id: int | str) -> str:
+def get_course_faculty(course_id: int | str) -> tuple[str, str]:
     response = session.get(
         f"{BASE_URL}/user/index.php?id={course_id}&perpage=5000",
         timeout=REQUEST_TIMEOUT,
@@ -366,8 +409,7 @@ def get_course_faculty(course_id: int | str) -> str:
 
     soup = BeautifulSoup(response.text, "html.parser")
     teacher_roles = {"Teacher", "Non-editing teacher"}
-    clean_names: list[str] = []
-    preferred_names: list[str] = []
+    faculty_entries: list[dict[str, Any]] = []
 
     for row in soup.find_all("tr"):
         values = [_normalize_text(cell) for cell in row.find_all("td")]
@@ -380,22 +422,41 @@ def get_course_faculty(course_id: int | str) -> str:
 
         cleaned_name = _clean_participant_name(participant_name)
         if cleaned_name:
-            clean_names.append(cleaned_name)
-            if not re.search(r"\d", participant_name):
-                preferred_names.append(cleaned_name)
+            profile_link = row.find("a", href=True)
+            profile_url = urljoin(BASE_URL, profile_link["href"]) if profile_link else ""
+            faculty_entries.append(
+                {
+                    "name": cleaned_name,
+                    "email": get_faculty_email(profile_url) if profile_url else "",
+                    "preferred": not re.search(r"\d", participant_name),
+                }
+            )
 
-    unique_names = list(dict.fromkeys(clean_names))
-    unique_preferred_names = list(dict.fromkeys(preferred_names))
-    chosen_names = unique_preferred_names or unique_names
+    if not faculty_entries:
+        return "Unknown Faculty", ""
 
-    if not chosen_names:
-        return "Unknown Faculty"
+    unique_entries: list[dict[str, Any]] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for entry in faculty_entries:
+        key = (entry["name"], entry["email"])
+        if key in seen_pairs:
+            continue
+        seen_pairs.add(key)
+        unique_entries.append(entry)
 
-    return ", ".join(chosen_names)
+    preferred_entries = [entry for entry in unique_entries if entry["preferred"]]
+    chosen_entries = preferred_entries or unique_entries
+
+    faculty_names = ", ".join(entry["name"] for entry in chosen_entries)
+    faculty_emails = ", ".join(
+        entry["email"] for entry in chosen_entries if entry["email"]
+    )
+
+    return faculty_names, faculty_emails
 
 
 def _export_score_csvs(dataframe: pd.DataFrame) -> None:
-    export_columns = ["date", "session_time", "course"]
+    export_columns = ["date", "session_time", "course", "faculty", "faculty_email"]
     filtered = dataframe.loc[dataframe["period_date"].notna()].copy()
     filtered = filtered.loc[filtered["period_date"].dt.date <= CUTOFF_DATE].copy()
 
@@ -434,7 +495,7 @@ def _write_daywise_text(path: Path, dataframe: pd.DataFrame) -> None:
         for row in group.itertuples(index=False):
             lines.append(
                 f"{_format_session_time_text(row.session_time)} : "
-                f"{row.course_code} : {row.subject_name} : {row.faculty}"
+                f"{row.course_code} : {row.subject_name} : {row.faculty} : {row.faculty_email}"
             )
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -458,7 +519,7 @@ def _write_duty_leaves_text(path: Path, dataframe: pd.DataFrame) -> None:
         for row in group.itertuples(index=False):
             lines.append(
                 f"{_format_session_time_text(row.session_time)} : "
-                f"{row.course_code} : {row.subject_name} : {row.faculty}"
+                f"{row.course_code} : {row.subject_name} : {row.faculty} : {row.faculty_email}"
             )
 
     lines.append("----")
@@ -490,11 +551,11 @@ def _export_score_texts(dataframe: pd.DataFrame) -> None:
 
     leaves = filtered.loc[
         filtered["score"] == "0/1",
-        ["date", "session_time", "course_code", "subject_name", "faculty"],
+        ["date", "session_time", "course_code", "subject_name", "faculty", "faculty_email"],
     ].reset_index(drop=True)
     unsure = filtered.loc[
         filtered["score"] == "?/1",
-        ["date", "session_time", "course_code", "subject_name", "faculty"],
+        ["date", "session_time", "course_code", "subject_name", "faculty", "faculty_email"],
     ].reset_index(drop=True)
 
     _write_daywise_text(LEAVES_TXT, leaves)
@@ -536,7 +597,7 @@ def _export_duty_leaves_text(dataframe: pd.DataFrame) -> None:
     filtered["date"] = filtered["period_date"].dt.strftime("%d-%m-%Y")
 
     output = filtered[
-        ["date", "session_time", "course_code", "subject_name", "faculty"]
+        ["date", "session_time", "course_code", "subject_name", "faculty", "faculty_email"]
     ].reset_index(drop=True)
     _write_duty_leaves_text(DUTY_LEAVES_TXT, output)
 
@@ -562,13 +623,14 @@ def main() -> pd.DataFrame:
             logger.warning("No attendance module found for %s", course_name)
             continue
 
-        faculty = get_course_faculty(course_id)
+        faculty, faculty_email = get_course_faculty(course_id)
 
         for record in get_attendance(module_id):
             record["course"] = course_name
             record["course_code"] = course_code
             record["subject_name"] = subject_name
             record["faculty"] = faculty
+            record["faculty_email"] = faculty_email
             record["course_id"] = course_id
             record["attendance_module_id"] = module_id
             all_data.append(record)
@@ -578,6 +640,7 @@ def main() -> pd.DataFrame:
         "course_code",
         "subject_name",
         "faculty",
+        "faculty_email",
         "course_id",
         "attendance_module_id",
         "period_date",
