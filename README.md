@@ -24,16 +24,16 @@ PYBUNK_PASSWORD=your_password
 PYBUNK_LOG_LEVEL=INFO
 ```
 
-Install the dependencies if you are not using the existing virtual environment:
+Install and sync the project with `uv`:
 
 ```powershell
-.venv\Scripts\python.exe -m pip install requests beautifulsoup4 pandas python-dotenv
+uv sync
 ```
 
 ## Run
 
 ```powershell
-.venv\Scripts\python.exe main.py
+uv run main.py
 ```
 
 ## Generated Files
