@@ -623,6 +623,10 @@ def fetch_attendance_dataframe(
     username: str | None = None,
     password: str | None = None,
 ) -> pd.DataFrame:
+    global session
+
+    session = requests.Session()
+    session.headers.update(DEFAULT_HEADERS)
     profile_email_cache.clear()
     login(username=username, password=password)
     sesskey = get_sesskey()

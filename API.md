@@ -24,8 +24,10 @@ Important behavior:
 
 - `dataset_id` values are stored only in server memory.
 - Restarting the API clears all fetched datasets.
+- `dataset_id` values now expire automatically after a short TTL.
 - Planner generation only considers courses included in `course_limits` with `max_dl > 0`.
 - If `event_dates` is empty, the planner falls back to selecting from all available bunk candidates instead of matching around events.
+- For production frontends, you can skip server memory entirely by sending `attendance_rows` back to `/api/planner/generate`.
 
 ## Endpoint Summary
 
@@ -72,12 +74,26 @@ Logs into Moodle, fetches attendance rows for in-progress courses, assigns `reco
 ```json
 {
   "dataset_id": "0c3d4d15-f27d-4f99-9343-a5ef6c0f48d9",
+  "dataset_expires_at": "2026-03-25T10:15:00+00:00",
   "summary": {
     "attendance_rows": 48,
     "course_count": 6,
     "leave_rows": 9,
     "not_marked_rows": 2
   },
+  "attendance_rows": [
+    {
+      "record_id": "rec_1",
+      "period_date": "2026-03-11",
+      "session_time": "2PM - 3PM",
+      "course_code": "ICS222",
+      "subject_name": "Object-Oriented Analysis and Design",
+      "faculty": "Jisha Mariyam John",
+      "faculty_email": "faculty@example.com",
+      "course": "ICS222 Object-Oriented Analysis and Design",
+      "score": "0/1"
+    }
+  ],
   "course_catalog": [
     {
       "course_code": "ICS222",
@@ -116,7 +132,9 @@ Logs into Moodle, fetches attendance rows for in-progress courses, assigns `reco
 | Field | Type | Notes |
 | --- | --- | --- |
 | `dataset_id` | `string` | In-memory dataset handle used by the planner endpoint |
+| `dataset_expires_at` | `string` | Expiry time for the legacy in-memory dataset handle |
 | `summary` | `object` | High-level counts for the fetched attendance data |
+| `attendance_rows` | `array` | Stateless planner input you can keep on the frontend and send back later |
 | `course_catalog` | `array` | Unique courses discovered in the dataset |
 | `default_course_limits` | `array` | Convenience defaults for planner requests |
 | `not_marked_rows` | `array` | Rows with score `?/1` that can be explicitly included in a plan |
@@ -161,11 +179,28 @@ Logs into Moodle, fetches attendance rows for in-progress courses, assigns `reco
 
 Generates a duty-leave recommendation plan using LMS bunk entries (`0/1`), optional manual bunks, and optionally selected `?/1` rows.
 
+This endpoint supports two input styles:
+
+1. Legacy mode: send `dataset_id`.
+2. Production-friendly stateless mode: send `attendance_rows`.
+
 ### Request Body
 
 ```json
 {
-  "dataset_id": "0c3d4d15-f27d-4f99-9343-a5ef6c0f48d9",
+  "attendance_rows": [
+    {
+      "record_id": "rec_1",
+      "period_date": "2026-03-15",
+      "session_time": "2PM - 3PM",
+      "course_code": "ICS222",
+      "subject_name": "Object-Oriented Analysis and Design",
+      "faculty": "Jisha Mariyam John",
+      "faculty_email": "faculty@example.com",
+      "course": "ICS222 Object-Oriented Analysis and Design",
+      "score": "0/1"
+    }
+  ],
   "event_dates": ["2026-03-17", "2026-03-18"],
   "manual_entries": [
     {
@@ -190,13 +225,16 @@ Generates a duty-leave recommendation plan using LMS bunk entries (`0/1`), optio
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `dataset_id` | `string` | Yes | Returned by `/api/attendance/fetch` |
+| `dataset_id` | `string` | No | Legacy in-memory input returned by `/api/attendance/fetch` |
+| `attendance_rows` | `object[]` | No | Stateless input returned by `/api/attendance/fetch`; recommended for production |
 | `event_dates` | `string[]` | No | ISO dates; empty list enables fallback planning without event matching |
 | `manual_entries` | `object[]` | No | Extra bunk candidates supplied by the client |
 | `not_marked_record_ids` | `string[]` | No | `record_id` values from `not_marked_rows` |
 | `course_limits` | `object[]` | No | Per-course caps; only courses with `max_dl > 0` are considered |
 | `cutoff_date` | `string \| null` | No | Excludes candidates after this ISO date |
 | `lookback_days` | `integer` | No | Event-match window, from `0` to `14`; default `4` |
+
+You must send at least one of `dataset_id` or `attendance_rows`.
 
 ### `manual_entries` Item
 
@@ -249,6 +287,7 @@ Generates a duty-leave recommendation plan using LMS bunk entries (`0/1`), optio
       "count": 3
     }
   ],
+  "planner_csv": "date,session_time,course,faculty,faculty_email,source,matched_event_date,days_before_event\n15-03-2026,2PM - 3PM,ICS222 Object-Oriented Analysis and Design,Jisha Mariyam John,faculty@example.com,manual,17-03-2026,2\n",
   "planner_text": "15-03-2026\n2PM - 3PM : ICS222 : Object-Oriented Analysis and Design : Jisha Mariyam John : faculty@example.com\n----\nDL Count By Course\nICS222 : Object-Oriented Analysis and Design : 3\n"
 }
 ```
@@ -260,6 +299,7 @@ Generates a duty-leave recommendation plan using LMS bunk entries (`0/1`), optio
 | `summary` | `object` | Counts for the generated recommendation set |
 | `planner_rows` | `array` | Tabular plan preview |
 | `course_counts` | `array` | Number of selected rows per course |
+| `planner_csv` | `string` | CSV content ready to download or stream from your frontend |
 | `planner_text` | `string` | Day-wise text output matching the planner's text export format |
 
 ### `planner_rows` Item
@@ -297,10 +337,29 @@ curl -X POST "http://127.0.0.1:8000/api/attendance/fetch" \
 
 ### 2. Generate a planner response
 
-Replace `<dataset_id>` with the value returned above.
+Recommended production pattern: use the `attendance_rows` returned above and send them back in the planner request from your Next.js server.
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/api/planner/generate" \
   -H "Content-Type: application/json" \
-  -d "{\"dataset_id\":\"<dataset_id>\",\"event_dates\":[\"2026-03-17\"],\"course_limits\":[{\"course_code\":\"ICS222\",\"max_dl\":3}]}"
+  -d "{\"attendance_rows\":[{\"record_id\":\"rec_1\",\"period_date\":\"2026-03-15\",\"session_time\":\"2PM - 3PM\",\"course_code\":\"ICS222\",\"subject_name\":\"Object-Oriented Analysis and Design\",\"faculty\":\"Jisha Mariyam John\",\"faculty_email\":\"faculty@example.com\",\"course\":\"ICS222 Object-Oriented Analysis and Design\",\"score\":\"0/1\"}],\"event_dates\":[\"2026-03-17\"],\"course_limits\":[{\"course_code\":\"ICS222\",\"max_dl\":3}]}"
 ```
+
+## Production Guardrails
+
+This API supports several environment-controlled deployment guardrails:
+
+| Variable | Purpose |
+| --- | --- |
+| `PYBUNK_API_TOKEN` | Requires `Authorization: Bearer <token>` on protected endpoints |
+| `PYBUNK_ALLOWED_ORIGINS` | Comma-separated CORS allowlist |
+| `PYBUNK_TRUSTED_HOSTS` | Comma-separated trusted hostnames |
+| `PYBUNK_RATE_LIMIT_PER_MINUTE` | Per-IP request cap for protected endpoints |
+| `PYBUNK_DATASET_TTL_SECONDS` | Expiry for legacy in-memory `dataset_id` values |
+| `PYBUNK_ENABLE_DOCS` | Enables or disables `/docs`, `/redoc`, and `/openapi.json` |
+
+For a public website, the recommended architecture is:
+
+1. Browser -> Next.js
+2. Next.js server -> pybunk API with bearer token
+3. Moodle credentials travel only between your Next.js server and the pybunk backend

@@ -163,10 +163,15 @@ def generate_duty_leave_plan(
         not_marked_entries if not_marked_entries is not None else pd.DataFrame()
     )
 
-    combined = pd.concat(
-        [lms_candidates, manual_candidates, not_marked_candidates],
-        ignore_index=True,
-    )
+    candidate_frames = [
+        frame
+        for frame in [lms_candidates, manual_candidates, not_marked_candidates]
+        if not frame.empty
+    ]
+    if not candidate_frames:
+        return pd.DataFrame(columns=candidate_columns)
+
+    combined = pd.concat(candidate_frames, ignore_index=True)
     combined["period_date"] = pd.to_datetime(combined["period_date"], errors="coerce")
     combined = combined.loc[combined["period_date"].notna()].copy()
 
