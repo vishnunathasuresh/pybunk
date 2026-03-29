@@ -816,7 +816,6 @@ export function BunkxApp() {
                 className="w-full justify-start overflow-x-auto rounded-none bg-transparent p-0"
               >
                 <TabsTrigger value="planner">Planner Controls</TabsTrigger>
-                <TabsTrigger value="dataset">Fetched Data</TabsTrigger>
                 <TabsTrigger value="results">Results & Exports</TabsTrigger>
               </TabsList>
 
