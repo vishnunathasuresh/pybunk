@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server"
 
-import { proxyJsonRequest } from "@/lib/backend"
+import { generatePlannerResponse } from "@/lib/planner"
+import type { PlannerGenerateRequest } from "@/lib/types"
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json()
-    return await proxyJsonRequest("/api/planner/generate", payload)
+    const payload = (await request.json()) as PlannerGenerateRequest
+    const response = generatePlannerResponse(payload)
+    return NextResponse.json(response)
   } catch (error) {
-    console.error("Planner proxy failed", error)
+    console.error("Planner route failed", error)
     return NextResponse.json(
-      { detail: "Unable to reach the pybunk backend." },
-      { status: 502 }
+      {
+        detail:
+          error instanceof Error
+            ? error.message
+            : "Unable to generate the planner response.",
+      },
+      { status: 400 }
     )
   }
 }

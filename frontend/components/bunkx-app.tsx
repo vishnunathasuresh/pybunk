@@ -13,6 +13,7 @@ import {
   LogOut,
   Plus,
   RefreshCcw,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
 } from "lucide-react"
@@ -29,6 +30,13 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -58,7 +66,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Tooltip,
@@ -75,6 +82,7 @@ import type {
 import { cn } from "@/lib/utils"
 
 const STORAGE_KEY = "bunkx-session-v1"
+const ROLL_NUMBER_PATTERN = /^\d{4}(BCS|BCD|BCY|ECE)\d{4}$/
 
 type ManualEntryDraft = {
   id: string
@@ -129,6 +137,10 @@ function uniqueSortedDates(values: string[]) {
   return [...new Set(values.filter(Boolean))].sort((left, right) =>
     left.localeCompare(right)
   )
+}
+
+function isValidRollNumber(value: string) {
+  return ROLL_NUMBER_PATTERN.test(value)
 }
 
 function makeManualEntry() {
@@ -264,7 +276,7 @@ function LoadingOverlay() {
         <div className="space-y-2">
           <p className="font-medium tracking-wide text-primary">Fetching Attendance</p>
           <h2 className="text-2xl font-semibold tracking-tight">
-            Pulling the latest data from Moodle
+            Pulling the latest data from LMS
           </h2>
           <p className="text-sm text-muted-foreground">
             BunkX is syncing attendance rows, course details, and planning defaults.
@@ -295,8 +307,8 @@ export function BunkxApp() {
   const [plannerError, setPlannerError] = useState<string | null>(null)
   const [isFetching, setIsFetching] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [hasHydrated, setHasHydrated] = useState(false)
-  const [activeTab, setActiveTab] = useState("planner")
 
   const deferredRows = useDeferredValue(plannerResult?.planner_rows ?? [])
   const deferredText = useDeferredValue(plannerResult?.planner_text ?? "")
@@ -321,9 +333,6 @@ export function BunkxApp() {
       setCutoffDate(persisted.cutoffDate || todayIso())
       setLookbackDays([persisted.lookbackDays ?? 4])
       setDefaultMaxDl(persisted.defaultMaxDl ?? 8)
-      if (persisted.plannerResult) {
-        setActiveTab("results")
-      }
     } catch (error) {
       console.error("Unable to restore session", error)
     } finally {
@@ -363,8 +372,17 @@ export function BunkxApp() {
   ])
 
   async function handleFetchAttendance() {
-    if (!credentials.username.trim() || !credentials.password.trim()) {
+    const normalizedUsername = credentials.username.trim().toUpperCase()
+
+    if (!normalizedUsername || !credentials.password.trim()) {
       setFetchError("Enter both your roll number and password.")
+      return
+    }
+
+    if (!isValidRollNumber(normalizedUsername)) {
+      setFetchError(
+        "Roll number must match 4 digits + BCS/BCD/BCY/ECE + 4 digits."
+      )
       return
     }
 
@@ -379,7 +397,7 @@ export function BunkxApp() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: credentials.username.trim(),
+          username: normalizedUsername,
           password: credentials.password,
         }),
       })
@@ -397,10 +415,10 @@ export function BunkxApp() {
       setCourseLimits((current) =>
         mergeCourseLimits(payload.default_course_limits, current)
       )
+      setCredentials((current) => ({ ...current, username: normalizedUsername }))
       setSelectedNotMarkedIds([])
       setPlannerResult(null)
-      setActiveTab("planner")
-      toast.success("Attendance fetched successfully.")
+      toast.success("LMS attendance fetched successfully.")
     } catch (error) {
       const message =
         error instanceof Error
@@ -430,7 +448,7 @@ export function BunkxApp() {
       }))
 
     const payload: PlannerGenerateRequest = {
-      dataset_id: fetchData.dataset_id,
+      attendance_rows: fetchData.attendance_rows,
       event_dates: eventDates,
       manual_entries,
       not_marked_record_ids: selectedNotMarkedIds,
@@ -440,33 +458,13 @@ export function BunkxApp() {
     }
 
     try {
-      let response = await fetch("/api/planner/generate", {
+      const response = await fetch("/api/planner/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
       })
-
-      if (response.status === 404) {
-        const detail = await parseError(response)
-        if (detail.toLowerCase().includes("dataset")) {
-          toast.info("Session cache expired, retrying with local attendance rows.")
-          response = await fetch("/api/planner/generate", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              ...payload,
-              dataset_id: null,
-              attendance_rows: fetchData.attendance_rows,
-            }),
-          })
-        } else {
-          throw new Error(detail)
-        }
-      }
 
       if (!response.ok) {
         throw new Error(await parseError(response))
@@ -478,7 +476,7 @@ export function BunkxApp() {
       }
 
       setPlannerResult(result)
-      setActiveTab("results")
+      setIsConfigOpen(false)
       toast.success("Duty leave plan generated.")
     } catch (error) {
       const message =
@@ -507,7 +505,6 @@ export function BunkxApp() {
     setDefaultMaxDl(8)
     setPlannerResult(null)
     setPlannerError(null)
-    setActiveTab("planner")
   }
 
   function resetSession() {
@@ -523,7 +520,6 @@ export function BunkxApp() {
     setDefaultMaxDl(8)
     setFetchError(null)
     setPlannerError(null)
-    setActiveTab("planner")
     window.sessionStorage.removeItem(STORAGE_KEY)
   }
 
@@ -611,7 +607,7 @@ export function BunkxApp() {
                   </Badge>
                   <div className="space-y-4">
                     <p className="text-sm uppercase tracking-[0.22em] text-muted-foreground">
-                      pybunk web workspace
+                      attendance planning workspace
                     </p>
                     <div className="space-y-3">
                       <h1 className="max-w-xl text-5xl font-semibold tracking-tight sm:text-6xl">
@@ -639,8 +635,8 @@ export function BunkxApp() {
                   />
                   <MetricCard
                     label="Planner"
-                    value="Streamlit parity"
-                    helper="All current controls preserved"
+                    value="All controls"
+                    helper="Same planning features, cleaner layout"
                   />
                 </div>
               </CardContent>
@@ -654,7 +650,7 @@ export function BunkxApp() {
                   </div>
                   <div>
                     <CardTitle className="text-2xl tracking-tight">
-                      Sign in to fetch attendance
+                      Sign in with your LMS account
                     </CardTitle>
                     <CardDescription>
                       Your credentials are forwarded to the existing pybunk backend
@@ -673,12 +669,17 @@ export function BunkxApp() {
                       onChange={(event) =>
                         setCredentials((current) => ({
                           ...current,
-                          username: event.target.value,
+                          username: event.target.value.toUpperCase().replace(/\s+/g, ""),
                         }))
                       }
-                      placeholder="UG2024..."
+                      placeholder="2024BCS0315"
+                      maxLength={11}
                       className="h-11 border-white/10 bg-white/5"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Format: `2024BCS0315`, `2024BCD0001`, `2024BCY0123`, or
+                      `2024ECE0042`.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
@@ -692,7 +693,7 @@ export function BunkxApp() {
                           password: event.target.value,
                         }))
                       }
-                      placeholder="Enter your Moodle password"
+                      placeholder="Enter your LMS password"
                       className="h-11 border-white/10 bg-white/5"
                     />
                   </div>
@@ -801,7 +802,7 @@ export function BunkxApp() {
               <MetricCard
                 label="Current Leaves"
                 value={fetchData.summary.leave_rows}
-                helper="Rows with 0/1 in Moodle"
+                helper="Rows with 0/1 in LMS"
               />
               <MetricCard
                 label="Not Marked"
@@ -810,16 +811,69 @@ export function BunkxApp() {
               />
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList
-                variant="line"
-                className="w-full justify-start overflow-x-auto rounded-none bg-transparent p-0"
-              >
-                <TabsTrigger value="planner">Planner Controls</TabsTrigger>
-                <TabsTrigger value="results">Results & Exports</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="planner" className="space-y-6 pt-2">
+            <div className="space-y-6 pt-2">
+              <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
+                <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-2">
+                    <h2 className="text-xl font-semibold tracking-tight">
+                      Plan configuration
+                    </h2>
+                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline" className="border-white/10 bg-white/5">
+                        {eventDates.length} event dates
+                      </Badge>
+                      <Badge variant="outline" className="border-white/10 bg-white/5">
+                        {manualEntries.filter((entry) => entry.date && entry.course_code).length} manual rows
+                      </Badge>
+                      <Badge variant="outline" className="border-white/10 bg-white/5">
+                        {selectedNotMarkedIds.length} not marked selected
+                      </Badge>
+                      <Badge variant="outline" className="border-white/10 bg-white/5">
+                        lookback {lookbackDays[0]} days
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-white/10 bg-white/5"
+                      onClick={() => setIsConfigOpen(true)}
+                    >
+                      <SlidersHorizontal className="size-4" />
+                      Configure plan
+                    </Button>
+                    <Button
+                      type="button"
+                      className="rounded-xl"
+                      onClick={generatePlannerWithFallback}
+                      disabled={isGenerating}
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Spinner className="size-4" />
+                          Generating plan
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="size-4" />
+                          Generate plan
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+                <DialogContent className="glass-panel max-h-[88svh] max-w-6xl overflow-hidden border-white/10 bg-card/95 p-0 sm:max-w-6xl">
+                  <DialogHeader className="border-b border-white/10 px-6 py-5">
+                    <DialogTitle className="text-xl">Plan configuration</DialogTitle>
+                    <DialogDescription>
+                      All planning options are here, without crowding the main workspace.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <ScrollArea className="max-h-[calc(88svh-6rem)] px-6 py-6">
+                    <div className="space-y-6 pr-2">
                 <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
                   <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
                     <CardHeader>
@@ -952,7 +1006,7 @@ export function BunkxApp() {
                     <CardHeader>
                       <CardTitle className="text-xl">Manual bunks</CardTitle>
                       <CardDescription>
-                        Add dates that are not reflected on Moodle yet.
+                        Add dates that are not reflected on LMS yet.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -1217,35 +1271,18 @@ export function BunkxApp() {
                   </CardContent>
                 </Card>
 
-                {plannerError ? (
-                  <div className="rounded-2xl border border-destructive/35 bg-destructive/10 px-4 py-3 text-sm text-red-100">
-                    {plannerError}
-                  </div>
-                ) : null}
+                    </div>
+                  </ScrollArea>
+                </DialogContent>
+              </Dialog>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-                  <Button
-                    type="button"
-                    size="lg"
-                    className="h-12 rounded-xl px-6"
-                    onClick={generatePlannerWithFallback}
-                    disabled={isGenerating}
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Spinner className="size-4" />
-                        Generating plan
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="size-4" />
-                        Generate Duty Leave Plan
-                      </>
-                    )}
-                  </Button>
+              {plannerError ? (
+                <div className="rounded-2xl border border-destructive/35 bg-destructive/10 px-4 py-3 text-sm text-red-100">
+                  {plannerError}
                 </div>
-              </TabsContent>
-              <TabsContent value="results" className="space-y-6 pt-2">
+              ) : null}
+
+              <div className="space-y-6">
                 {isGenerating ? (
                   <div className="grid gap-4 md:grid-cols-3">
                     <Skeleton className="h-28 rounded-[1.75rem]" />
@@ -1469,8 +1506,8 @@ export function BunkxApp() {
                     </CardContent>
                   </Card>
                 )}
-              </TabsContent>
-            </Tabs>
+              </div>
+            </div>
           </section>
         )}
       </div>

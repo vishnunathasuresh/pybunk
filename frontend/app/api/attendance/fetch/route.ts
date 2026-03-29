@@ -1,16 +1,33 @@
 import { NextResponse } from "next/server"
 
-import { proxyJsonRequest } from "@/lib/backend"
+import { fetchAttendanceResponse } from "@/lib/lms"
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json()
-    return await proxyJsonRequest("/api/attendance/fetch", payload)
+    const payload = (await request.json()) as {
+      username?: string
+      password?: string
+    }
+
+    if (!payload.username || !payload.password) {
+      return NextResponse.json(
+        { detail: "Username and password are required." },
+        { status: 400 }
+      )
+    }
+
+    const response = await fetchAttendanceResponse(payload.username, payload.password)
+    return NextResponse.json(response)
   } catch (error) {
-    console.error("Attendance proxy failed", error)
+    console.error("Attendance route failed", error)
     return NextResponse.json(
-      { detail: "Unable to reach the pybunk backend." },
-      { status: 502 }
+      {
+        detail:
+          error instanceof Error
+            ? error.message
+            : "Attendance fetch failed. Check credentials or LMS availability.",
+      },
+      { status: 400 }
     )
   }
 }

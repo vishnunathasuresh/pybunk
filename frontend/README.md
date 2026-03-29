@@ -4,13 +4,7 @@ This folder contains the primary web frontend for `pybunk`, built with Next.js a
 
 ## Local Development
 
-Start the Python backend from the repo root:
-
-```powershell
-uv run uvicorn api:app --reload
-```
-
-Then start the frontend:
+Start the frontend:
 
 ```powershell
 copy .env.example .env.local
@@ -20,10 +14,9 @@ bun run dev
 
 ## Frontend Environment
 
-- `PYBUNK_API_BASE_URL` points to the FastAPI backend
-- `PYBUNK_API_TOKEN` is optional and should match the backend token when enabled
+No frontend environment variables are required for the standalone web flow.
 
-The frontend proxies attendance fetch and planner generation through Next route handlers in `app/api/`.
+The frontend now handles LMS attendance fetch and planner generation through Next route handlers in `app/api/`.
 
 ## One-command Local Testing
 
