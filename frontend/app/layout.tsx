@@ -20,7 +20,12 @@ const fontMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "BunkX",
-  description: "Modern duty leave planning for pybunk.",
+  description: "Modern duty leave planning for IIIT Kottayam.",
+  icons: {
+    icon: "/bfrovrflw.png",
+    shortcut: "/bfrovrflw.png",
+    apple: "/bfrovrflw.png",
+  },
 }
 
 export default function RootLayout({
