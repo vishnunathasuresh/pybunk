@@ -66,6 +66,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Tooltip,
@@ -213,13 +214,23 @@ function MetricCard({
   value: number | string
   helper: string
 }) {
+  const compactValue =
+    typeof value === "string" && value.length <= 8 && !value.includes(" ")
+
   return (
-    <Card className="glass-panel border-white/10 bg-card/80">
-      <CardContent className="space-y-2 p-5">
+    <Card className="glass-panel glass-border bg-card/80">
+      <CardContent className="space-y-3 p-5">
         <p className="text-sm text-muted-foreground">{label}</p>
-        <div className="flex items-end justify-between gap-3">
-          <p className="text-3xl font-semibold tracking-tight">{value}</p>
-          <p className="max-w-32 text-right text-xs text-muted-foreground">
+        <div className="min-w-0 space-y-3">
+          <p
+            className={cn(
+              "max-w-[10ch] text-4xl leading-[0.95] font-semibold tracking-tight text-pretty",
+              compactValue && "whitespace-nowrap"
+            )}
+          >
+            {value}
+          </p>
+          <p className="max-w-[18ch] text-sm leading-6 text-muted-foreground">
             {helper}
           </p>
         </div>
@@ -309,6 +320,8 @@ export function BunkxApp() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [hasHydrated, setHasHydrated] = useState(false)
+  const [mobileConfigSection, setMobileConfigSection] = useState("basics")
+  const [mobileResultSection, setMobileResultSection] = useState("overview")
 
   const deferredRows = useDeferredValue(plannerResult?.planner_rows ?? [])
   const deferredText = useDeferredValue(plannerResult?.planner_text ?? "")
@@ -593,24 +606,24 @@ export function BunkxApp() {
     <main className="relative overflow-hidden">
       {isFetching ? <LoadingOverlay /> : null}
 
-      <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!fetchData ? (
-          <section className="grid min-h-[calc(100svh-3rem)] items-stretch gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-            <Card className="glass-panel subtle-grid relative overflow-hidden rounded-[2rem] border-white/10 bg-card/70">
-              <CardContent className="flex h-full flex-col justify-between p-8 sm:p-10">
+          <section className="grid min-h-[calc(100svh-2rem)] items-stretch gap-4 sm:gap-6 lg:min-h-[calc(100svh-3rem)] lg:grid-cols-[1.15fr_0.85fr]">
+            <Card className="order-2 glass-panel subtle-grid relative overflow-hidden rounded-[2rem] border-white/10 bg-card/70 lg:order-1">
+              <CardContent className="flex h-full flex-col justify-between p-6 sm:p-8 lg:p-10">
                 <div className="space-y-6">
                   <Badge
                     variant="outline"
                     className="w-fit border-primary/35 bg-primary/10 px-3 py-1 text-primary"
                   >
-                    made by bufrovrflw
+                    made by bfrovrflw
                   </Badge>
                   <div className="space-y-4">
                     <p className="text-sm uppercase tracking-[0.22em] text-muted-foreground">
                       attendance planning workspace
                     </p>
                     <div className="space-y-3">
-                      <h1 className="max-w-xl text-5xl font-semibold tracking-tight sm:text-6xl">
+                      <h1 className="max-w-xl text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
                         BunkX
                       </h1>
                       <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
@@ -622,7 +635,7 @@ export function BunkxApp() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="hidden gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-3">
                   <MetricCard
                     label="Flow"
                     value="2-step"
@@ -642,8 +655,8 @@ export function BunkxApp() {
               </CardContent>
             </Card>
 
-            <Card className="glass-panel rounded-[2rem] border-white/10 bg-card/78">
-              <CardHeader className="space-y-4 p-8 pb-4">
+            <Card className="order-1 glass-panel rounded-[2rem] border-white/10 bg-card/78 lg:order-2">
+              <CardHeader className="space-y-4 p-6 pb-4 sm:p-8">
                 <div className="flex items-center gap-3">
                   <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/15 text-primary">
                     <Sparkles className="size-5" />
@@ -659,7 +672,7 @@ export function BunkxApp() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-6 p-8 pt-2">
+              <CardContent className="space-y-6 p-6 pt-2 sm:p-8 sm:pt-2">
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <Label htmlFor="username">Roll number</Label>
@@ -736,7 +749,7 @@ export function BunkxApp() {
         ) : (
           <section className="space-y-6 pb-10">
             <Card className="glass-panel overflow-hidden rounded-[2rem] border-white/10 bg-card/75">
-              <CardContent className="p-6 sm:p-8">
+              <CardContent className="p-5 sm:p-8">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center gap-3">
@@ -747,7 +760,7 @@ export function BunkxApp() {
                         variant="outline"
                         className="border-primary/30 bg-primary/10 px-3 text-primary"
                       >
-                        made by bufrovrflw
+                        made by bfrovrflw
                       </Badge>
                       <Badge variant="outline" className="border-white/10 bg-white/5">
                         cache until {displayDateTime(fetchData.dataset_expires_at)}
@@ -759,11 +772,11 @@ export function BunkxApp() {
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
+                  <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
                     <Button
                       type="button"
                       variant="outline"
-                      className="border-white/10 bg-white/5"
+                      className="w-full border-white/10 bg-white/5 sm:w-auto"
                       onClick={handleFetchAttendance}
                       disabled={isFetching}
                     >
@@ -773,13 +786,13 @@ export function BunkxApp() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="border-white/10 bg-white/5"
+                      className="w-full border-white/10 bg-white/5 sm:w-auto"
                       onClick={resetPlannerWorkspace}
                     >
                       <Trash2 className="size-4" />
                       Reset planner
                     </Button>
-                    <Button type="button" variant="ghost" onClick={resetSession}>
+                    <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={resetSession}>
                       <LogOut className="size-4" />
                       Switch account
                     </Button>
@@ -788,7 +801,7 @@ export function BunkxApp() {
               </CardContent>
             </Card>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="hidden gap-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 label="Courses"
                 value={fetchData.summary.course_count}
@@ -813,7 +826,7 @@ export function BunkxApp() {
 
             <div className="space-y-6 pt-2">
               <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
-                <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <CardContent className="flex flex-col gap-4 p-4 sm:p-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-2">
                     <h2 className="text-xl font-semibold tracking-tight">
                       Plan configuration
@@ -833,11 +846,11 @@ export function BunkxApp() {
                       </Badge>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
                     <Button
                       type="button"
                       variant="outline"
-                      className="border-white/10 bg-white/5"
+                      className="w-full border-white/10 bg-white/5 sm:w-auto"
                       onClick={() => setIsConfigOpen(true)}
                     >
                       <SlidersHorizontal className="size-4" />
@@ -845,7 +858,7 @@ export function BunkxApp() {
                     </Button>
                     <Button
                       type="button"
-                      className="rounded-xl"
+                      className="w-full rounded-xl sm:w-auto"
                       onClick={generatePlannerWithFallback}
                       disabled={isGenerating}
                     >
@@ -865,16 +878,33 @@ export function BunkxApp() {
                 </CardContent>
               </Card>
               <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-                <DialogContent className="glass-panel max-h-[88svh] max-w-6xl overflow-hidden border-white/10 bg-card/95 p-0 sm:max-w-6xl">
-                  <DialogHeader className="border-b border-white/10 px-6 py-5">
+                <DialogContent className="glass-panel max-h-[100svh] w-[calc(100vw-1rem)] max-w-6xl overflow-hidden border-white/10 bg-card/95 p-0 sm:max-h-[88svh] sm:w-full sm:max-w-6xl">
+                  <DialogHeader className="border-b border-white/10 px-4 py-4 sm:px-6 sm:py-5">
                     <DialogTitle className="text-xl">Plan configuration</DialogTitle>
                     <DialogDescription>
                       All planning options are here, without crowding the main workspace.
                     </DialogDescription>
                   </DialogHeader>
-                  <ScrollArea className="max-h-[calc(88svh-6rem)] px-6 py-6">
-                    <div className="space-y-6 pr-2">
-                <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+                  <ScrollArea className="max-h-[calc(100svh-5rem)] px-4 py-4 sm:max-h-[calc(88svh-6rem)] sm:px-6 sm:py-6">
+                    <div className="space-y-4 pr-0 sm:space-y-6 sm:pr-2">
+                <Tabs
+                  value={mobileConfigSection}
+                  onValueChange={setMobileConfigSection}
+                  className="sm:hidden"
+                >
+                  <TabsList className="grid w-full grid-cols-3 bg-background/60">
+                    <TabsTrigger value="basics">Basics</TabsTrigger>
+                    <TabsTrigger value="manual">Manual</TabsTrigger>
+                    <TabsTrigger value="review">Review</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+
+                <div
+                  className={cn(
+                    "grid gap-4 sm:gap-6 xl:grid-cols-[1.1fr_0.9fr]",
+                    mobileConfigSection !== "basics" && "hidden sm:grid"
+                  )}
+                >
                   <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
                     <CardHeader>
                       <div className="flex items-center justify-between gap-3">
@@ -897,7 +927,7 @@ export function BunkxApp() {
                             placeholder="Pick an event date"
                           />
                         </div>
-                        <Button type="button" onClick={addEventDate} className="sm:min-w-40">
+                        <Button type="button" onClick={addEventDate} className="w-full sm:min-w-40 sm:w-auto">
                           <Plus className="size-4" />
                           Add event
                         </Button>
@@ -1001,7 +1031,12 @@ export function BunkxApp() {
                   </Card>
                 </div>
 
-                <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+                <div
+                  className={cn(
+                    "grid gap-4 sm:gap-6 xl:grid-cols-[1.15fr_0.85fr]",
+                    mobileConfigSection !== "manual" && "hidden sm:grid"
+                  )}
+                >
                   <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
                     <CardHeader>
                       <CardTitle className="text-xl">Manual bunks</CardTitle>
@@ -1011,7 +1046,7 @@ export function BunkxApp() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <ScrollArea className="w-full rounded-2xl border border-white/10">
-                        <div className="min-w-[42rem]">
+                        <div className="min-w-[34rem] sm:min-w-[42rem]">
                           <Table>
                             <TableHeader>
                               <TableRow className="border-white/10">
@@ -1024,7 +1059,7 @@ export function BunkxApp() {
                             <TableBody>
                               {manualEntries.map((entry) => (
                                 <TableRow key={entry.id} className="border-white/10">
-                                  <TableCell className="min-w-40">
+                                  <TableCell className="min-w-32 sm:min-w-40">
                                     <Input
                                       type="date"
                                       value={entry.date}
@@ -1038,7 +1073,7 @@ export function BunkxApp() {
                                       className="border-white/10 bg-white/5"
                                     />
                                   </TableCell>
-                                  <TableCell className="min-w-52">
+                                  <TableCell className="min-w-40 sm:min-w-52">
                                     <Select
                                       value={entry.course_code}
                                       onValueChange={(value) =>
@@ -1118,7 +1153,7 @@ export function BunkxApp() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <ScrollArea className="h-[24rem] rounded-2xl border border-white/10">
+                      <ScrollArea className="h-[20rem] rounded-2xl border border-white/10 sm:h-[24rem]">
                         <Table>
                           <TableHeader>
                             <TableRow className="border-white/10">
@@ -1175,7 +1210,12 @@ export function BunkxApp() {
                   </Card>
                 </div>
 
-                <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
+                <Card
+                  className={cn(
+                    "glass-panel rounded-[1.75rem] border-white/10 bg-card/75",
+                    mobileConfigSection !== "review" && "hidden sm:block"
+                  )}
+                >
                   <CardHeader>
                     <CardTitle className="text-xl">Not marked leaves</CardTitle>
                     <CardDescription>
@@ -1189,11 +1229,11 @@ export function BunkxApp() {
                           <Badge variant="outline" className="border-white/10 bg-white/5">
                             {selectedNotMarkedIds.length} selected
                           </Badge>
-                          <div className="flex gap-2">
+                          <div className="grid w-full gap-2 sm:flex sm:w-auto">
                             <Button
                               type="button"
                               variant="outline"
-                              className="border-white/10 bg-white/5"
+                              className="w-full border-white/10 bg-white/5 sm:w-auto"
                               onClick={() =>
                                 setSelectedNotMarkedIds(
                                   fetchData.not_marked_rows.map((row) => row.record_id)
@@ -1212,7 +1252,7 @@ export function BunkxApp() {
                             </Button>
                           </div>
                         </div>
-                        <ScrollArea className="h-[22rem] rounded-2xl border border-white/10">
+                        <ScrollArea className="h-[18rem] rounded-2xl border border-white/10 sm:h-[22rem]">
                           <Table>
                             <TableHeader>
                               <TableRow className="border-white/10">
@@ -1293,7 +1333,24 @@ export function BunkxApp() {
 
                 {plannerResult ? (
                   <>
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <Tabs
+                      value={mobileResultSection}
+                      onValueChange={setMobileResultSection}
+                      className="sm:hidden"
+                    >
+                      <TabsList className="grid w-full grid-cols-3 bg-background/60">
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="preview">Preview</TabsTrigger>
+                        <TabsTrigger value="export">Export</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+
+                    <div
+                      className={cn(
+                        "grid gap-4 sm:grid-cols-2 xl:grid-cols-3",
+                        mobileResultSection !== "overview" && "hidden sm:grid"
+                      )}
+                    >
                       <MetricCard
                         label="Recommended Rows"
                         value={plannerResult.summary.recommended_rows}
@@ -1311,8 +1368,19 @@ export function BunkxApp() {
                       />
                     </div>
 
-                    <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-                      <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
+                    <div
+                      className={cn(
+                        "grid gap-4 sm:gap-6 xl:grid-cols-[1.08fr_0.92fr]",
+                        !["preview", "export"].includes(mobileResultSection) &&
+                          "hidden sm:grid"
+                      )}
+                    >
+                      <Card
+                        className={cn(
+                          "glass-panel rounded-[1.75rem] border-white/10 bg-card/75",
+                          mobileResultSection !== "preview" && "hidden sm:block"
+                        )}
+                      >
                         <CardHeader>
                           <CardTitle className="text-xl">Plan preview</CardTitle>
                           <CardDescription>
@@ -1320,57 +1388,64 @@ export function BunkxApp() {
                           </CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <ScrollArea className="h-[30rem] rounded-2xl border border-white/10">
-                            <Table>
-                              <TableHeader>
-                                <TableRow className="border-white/10">
-                                  <TableHead>Date</TableHead>
-                                  <TableHead>Session</TableHead>
-                                  <TableHead>Course</TableHead>
-                                  <TableHead>Source</TableHead>
-                                  <TableHead>Matched Event</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {deferredRows.map((row, index) => (
-                                  <TableRow
-                                    key={`${row.date}-${row.course}-${index}`}
-                                    className="border-white/10"
-                                  >
-                                    <TableCell>{row.date || "-"}</TableCell>
-                                    <TableCell>{row.session_time || "-"}</TableCell>
-                                    <TableCell>
-                                      <div className="space-y-1">
-                                        <p className="font-medium">
-                                          {row.course || "Unknown course"}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                          {row.faculty || "Unknown faculty"}
-                                        </p>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge variant="outline" className="border-white/10 bg-white/5">
-                                        {row.source || "lms"}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="space-y-1">
-                                        <p>{row.matched_event_date || "Fallback mode"}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                          {row.days_before_event ?? "-"}
-                                        </p>
-                                      </div>
-                                    </TableCell>
+                          <div className="h-[20rem] overflow-auto rounded-2xl border border-white/10 sm:h-[30rem]">
+                            <div className="min-w-[52rem]">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="border-white/10">
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Session</TableHead>
+                                    <TableHead>Course</TableHead>
+                                    <TableHead>Source</TableHead>
+                                    <TableHead>Matched Event</TableHead>
                                   </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </ScrollArea>
+                                </TableHeader>
+                                <TableBody>
+                                  {deferredRows.map((row, index) => (
+                                    <TableRow
+                                      key={`${row.date}-${row.course}-${index}`}
+                                      className="border-white/10"
+                                    >
+                                      <TableCell>{row.date || "-"}</TableCell>
+                                      <TableCell>{row.session_time || "-"}</TableCell>
+                                      <TableCell>
+                                        <div className="space-y-1">
+                                          <p className="font-medium">
+                                            {row.course || "Unknown course"}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {row.faculty || "Unknown faculty"}
+                                          </p>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant="outline" className="border-white/10 bg-white/5">
+                                          {row.source || "lms"}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="space-y-1">
+                                          <p>{row.matched_event_date || "Fallback mode"}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {row.days_before_event ?? "-"}
+                                          </p>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
                         </CardContent>
                       </Card>
 
-                      <div className="space-y-6">
+                      <div
+                        className={cn(
+                          "space-y-6",
+                          mobileResultSection !== "export" && "hidden sm:block"
+                        )}
+                      >
                         <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
                           <CardHeader>
                             <CardTitle className="text-xl">Export actions</CardTitle>
@@ -1430,49 +1505,60 @@ export function BunkxApp() {
                           </CardContent>
                         </Card>
 
-                        <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
-                          <CardHeader>
-                            <CardTitle className="text-xl">Course counts</CardTitle>
-                            <CardDescription>
-                              How many selected rows each course contributes.
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <ScrollArea className="h-56 rounded-2xl border border-white/10">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow className="border-white/10">
-                                    <TableHead>Course</TableHead>
-                                    <TableHead>Subject</TableHead>
-                                    <TableHead className="text-right">Count</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {plannerResult.course_counts.map((count) => (
-                                    <TableRow
-                                      key={`${count.course_code}-${count.subject_name}`}
-                                      className="border-white/10"
-                                    >
-                                      <TableCell className="font-medium">
-                                        {count.course_code || "Unknown"}
-                                      </TableCell>
-                                      <TableCell>
-                                        {count.subject_name || "Unknown subject"}
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        {count.count}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </ScrollArea>
-                          </CardContent>
-                        </Card>
                       </div>
                     </div>
 
-                    <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
+                    <Card
+                      className={cn(
+                        "glass-panel rounded-[1.75rem] border-white/10 bg-card/75",
+                        mobileResultSection !== "preview" && "hidden sm:block"
+                      )}
+                    >
+                      <CardHeader>
+                        <CardTitle className="text-xl">Course counts</CardTitle>
+                        <CardDescription>
+                          How many selected rows each course contributes.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ScrollArea className="h-48 rounded-2xl border border-white/10 sm:h-56">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="border-white/10">
+                                <TableHead>Course</TableHead>
+                                <TableHead>Subject</TableHead>
+                                <TableHead className="text-right">Count</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {plannerResult.course_counts.map((count) => (
+                                <TableRow
+                                  key={`${count.course_code}-${count.subject_name}`}
+                                  className="border-white/10"
+                                >
+                                  <TableCell className="font-medium">
+                                    {count.course_code || "Unknown"}
+                                  </TableCell>
+                                  <TableCell>
+                                    {count.subject_name || "Unknown subject"}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {count.count}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                      </CardContent>
+                    </Card>
+
+                    <Card
+                      className={cn(
+                        "glass-panel rounded-[1.75rem] border-white/10 bg-card/75",
+                        mobileResultSection !== "export" && "hidden sm:block"
+                      )}
+                    >
                       <CardHeader>
                         <CardTitle className="text-xl">Formatted planner output</CardTitle>
                         <CardDescription>
@@ -1483,14 +1569,14 @@ export function BunkxApp() {
                         <Textarea
                           value={deferredText}
                           readOnly
-                          className="min-h-[20rem] resize-none border-white/10 bg-black/20 font-mono text-xs leading-6"
+                          className="min-h-[16rem] resize-none border-white/10 bg-black/20 font-mono text-xs leading-6 sm:min-h-[20rem]"
                         />
                       </CardContent>
                     </Card>
                   </>
                 ) : (
                   <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
-                    <CardContent className="flex min-h-72 flex-col items-center justify-center gap-4 p-10 text-center">
+                    <CardContent className="flex min-h-64 flex-col items-center justify-center gap-4 p-6 text-center sm:min-h-72 sm:p-10">
                       <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/12 text-primary">
                         <Sparkles className="size-6" />
                       </div>
