@@ -31,6 +31,7 @@ type RawAttendanceRow = {
 class LmsClient {
   private readonly cookies = new Map<string, string>()
   private readonly profileEmailCache = new Map<number, string>()
+  private static readonly MAX_REDIRECTS = 10
 
   private applyCookies(headers: Headers) {
     if (!this.cookies.size) {
@@ -47,7 +48,9 @@ class LmsClient {
     const getSetCookie = (
       response.headers as Headers & { getSetCookie?: () => string[] }
     ).getSetCookie
-    const cookies = getSetCookie ? getSetCookie.call(response.headers) : []
+    const cookies = getSetCookie
+      ? getSetCookie.call(response.headers)
+      : splitSetCookieHeader(response.headers.get("set-cookie"))
 
     for (const cookie of cookies) {
       const [pair] = cookie.split(";", 1)
@@ -65,26 +68,56 @@ class LmsClient {
   }
 
   private async request(url: string, init: RequestInit = {}, context: string) {
-    const headers = new Headers(DEFAULT_HEADERS)
-    for (const [key, value] of new Headers(init.headers).entries()) {
-      headers.set(key, value)
+    let currentUrl = url
+    let currentInit: RequestInit = { ...init }
+
+    for (let redirectCount = 0; redirectCount <= LmsClient.MAX_REDIRECTS; redirectCount += 1) {
+      const headers = new Headers(DEFAULT_HEADERS)
+      for (const [key, value] of new Headers(currentInit.headers).entries()) {
+        headers.set(key, value)
+      }
+      this.applyCookies(headers)
+
+      const response = await fetch(currentUrl, {
+        ...currentInit,
+        headers,
+        redirect: "manual",
+        cache: "no-store",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      })
+      this.storeCookies(response)
+
+      if (isRedirectResponse(response.status)) {
+        const location = response.headers.get("location")
+        if (!location) {
+          throw new Error(`${context} redirected without a location header.`)
+        }
+
+        const nextUrl = new URL(location, currentUrl).toString()
+        const nextMethod = getRedirectMethod(currentInit.method, response.status)
+        const nextHeaders = new Headers(headers)
+        if (nextMethod === "GET" || nextMethod === "HEAD") {
+          nextHeaders.delete("Content-Type")
+          nextHeaders.delete("Content-Length")
+        }
+
+        currentUrl = nextUrl
+        currentInit = {
+          method: nextMethod,
+          headers: nextHeaders,
+          body: nextMethod === "GET" || nextMethod === "HEAD" ? undefined : currentInit.body,
+        }
+        continue
+      }
+
+      if (!response.ok) {
+        throw new Error(`${context} failed with ${response.status}`)
+      }
+
+      return response
     }
-    this.applyCookies(headers)
 
-    const response = await fetch(url, {
-      ...init,
-      headers,
-      redirect: "follow",
-      cache: "no-store",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    })
-    this.storeCookies(response)
-
-    if (!response.ok) {
-      throw new Error(`${context} failed with ${response.status}`)
-    }
-
-    return response
+    throw new Error(`${context} exceeded redirect limit.`)
   }
 
   async getLoginToken() {
@@ -121,7 +154,12 @@ class LmsClient {
       "Logging in"
     )
 
-    if (!response.url.includes("/my/") && !response.url.includes("dashboard")) {
+    const html = await response.text()
+    if (
+      response.url.includes("/login/index.php") &&
+      html.includes("logintoken") &&
+      !html.includes("sesskey")
+    ) {
       throw new Error("LMS login failed. Check your roll number and password.")
     }
   }
@@ -141,6 +179,10 @@ class LmsClient {
       if (match) {
         return match[1]
       }
+    }
+
+    if (html.includes("logintoken") || html.includes("login/index.php")) {
+      throw new Error("LMS login failed. Check your roll number and password.")
     }
 
     throw new Error("Sesskey not found in LMS dashboard HTML.")
@@ -340,6 +382,26 @@ class LmsClient {
 
 function normalizeWhitespace(value: string | null | undefined) {
   return (value || "").replace(/\s+/g, " ").trim()
+}
+
+function splitSetCookieHeader(header: string | null) {
+  if (!header) {
+    return []
+  }
+
+  return header.split(/,(?=\s*[^;,=\s]+=[^;,]+)/g)
+}
+
+function isRedirectResponse(status: number) {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308
+}
+
+function getRedirectMethod(method: string | undefined, status: number) {
+  const normalized = (method || "GET").toUpperCase()
+  if (status === 303 || ((status === 301 || status === 302) && normalized === "POST")) {
+    return "GET"
+  }
+  return normalized
 }
 
 function splitCourseName(value: string) {
