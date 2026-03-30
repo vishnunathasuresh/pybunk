@@ -62,12 +62,33 @@ Logs into Moodle, fetches attendance rows for in-progress courses, assigns `reco
 }
 ```
 
+### Header-Based Credentials (Alternative)
+
+You can send credentials in headers instead of JSON body.
+
+Preferred (standard) format:
+
+```http
+Authorization: Basic base64(username:password)
+```
+
+Alternative custom headers:
+
+```http
+X-Pybunk-Username: your_roll_number
+X-Pybunk-Password: your_password
+```
+
+If headers are provided, the API uses header credentials first.
+
 ### Request Fields
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `username` | `string` | Yes | Moodle username / roll number |
 | `password` | `string` | Yes | Moodle password |
+
+When using headers, the `username` and `password` body fields are optional.
 
 ### Response Shape
 

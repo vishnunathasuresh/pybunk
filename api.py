@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 import os
 import secrets
@@ -72,7 +74,12 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Pybunk-Username",
+        "X-Pybunk-Password",
+    ],
 )
 
 FETCH_LOCK = Lock()
@@ -83,8 +90,8 @@ DATASETS: dict[str, tuple[datetime, pd.DataFrame]] = {}
 
 
 class AttendanceFetchRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=128)
-    password: str = Field(min_length=1, max_length=256)
+    username: str | None = Field(default=None, min_length=1, max_length=128)
+    password: str | None = Field(default=None, min_length=1, max_length=256)
 
 
 class AttendanceRowInput(BaseModel):
@@ -334,6 +341,56 @@ def _fetch_attendance_dataframe(username: str, password: str) -> pd.DataFrame:
     return attendance_df
 
 
+def _decode_basic_auth_header(authorization: str | None) -> tuple[str, str] | None:
+    if not authorization:
+        return None
+
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "basic" or not token:
+        return None
+
+    try:
+        decoded = base64.b64decode(token, validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid Authorization header.") from exc
+
+    username, separator, password = decoded.partition(":")
+    if not separator or not username.strip() or not password:
+        raise HTTPException(
+            status_code=400,
+            detail="Authorization header must include both username and password.",
+        )
+
+    return username.strip(), password
+
+
+def _resolve_fetch_credentials(
+    payload: AttendanceFetchRequest | None,
+    raw_request: Request,
+) -> tuple[str, str]:
+    authorization = _decode_basic_auth_header(raw_request.headers.get("authorization"))
+    if authorization:
+        return authorization
+
+    header_username = (raw_request.headers.get("x-pybunk-username") or "").strip()
+    header_password = raw_request.headers.get("x-pybunk-password") or ""
+    if header_username and header_password:
+        return header_username, header_password
+
+    body_username = (payload.username if payload else "") or ""
+    body_password = (payload.password if payload else "") or ""
+    if body_username.strip() and body_password:
+        return body_username.strip(), body_password
+
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Username and password are required in JSON body, Authorization header, "
+            "or X-Pybunk-* headers."
+        ),
+    )
+
+
 def _fetch_response(attendance_df: pd.DataFrame) -> dict[str, Any]:
     dataset_id, expires_at = _store_dataset(attendance_df)
     course_catalog = planner.build_course_catalog(attendance_df)
@@ -401,10 +458,14 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/attendance/fetch", dependencies=[Depends(_require_api_guard)])
-def fetch_attendance(request: AttendanceFetchRequest) -> dict[str, Any]:
+def fetch_attendance(
+    raw_request: Request,
+    request: AttendanceFetchRequest | None = None,
+) -> dict[str, Any]:
+    username, password = _resolve_fetch_credentials(request, raw_request)
     attendance_df = _fetch_attendance_dataframe(
-        username=request.username,
-        password=request.password,
+        username=username,
+        password=password,
     )
     return _fetch_response(attendance_df)
 

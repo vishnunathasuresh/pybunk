@@ -404,15 +404,12 @@ export function BunkxApp() {
     setIsFetching(true)
 
     try {
+      const basicToken = btoa(`${normalizedUsername}:${credentials.password}`)
       const response = await fetch("/api/attendance/fetch", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          Authorization: `Basic ${basicToken}`,
         },
-        body: JSON.stringify({
-          username: normalizedUsername,
-          password: credentials.password,
-        }),
       })
 
       if (!response.ok) {
@@ -595,8 +592,8 @@ export function BunkxApp() {
     return (
       <main className="mx-auto flex min-h-svh w-full max-w-7xl items-center justify-center px-6 py-16">
         <div className="grid w-full gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <Skeleton className="h-[28rem] rounded-[2rem]" />
-          <Skeleton className="h-[28rem] rounded-[2rem]" />
+          <Skeleton className="h-112 rounded-[2rem]" />
+          <Skeleton className="h-112 rounded-[2rem]" />
         </div>
       </main>
     )
@@ -878,7 +875,7 @@ export function BunkxApp() {
                 </CardContent>
               </Card>
               <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-                <DialogContent className="glass-panel max-h-[100svh] w-[calc(100vw-1rem)] max-w-6xl overflow-hidden border-white/10 bg-card/95 p-0 sm:max-h-[88svh] sm:w-full sm:max-w-6xl">
+                <DialogContent className="glass-panel max-h-svh w-[calc(100vw-1rem)] max-w-6xl overflow-hidden border-white/10 bg-card/95 p-0 sm:max-h-[88svh] sm:w-full sm:max-w-6xl">
                   <DialogHeader className="border-b border-white/10 px-4 py-4 sm:px-6 sm:py-5">
                     <DialogTitle className="text-xl">Plan configuration</DialogTitle>
                     <DialogDescription>
@@ -1046,7 +1043,7 @@ export function BunkxApp() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <ScrollArea className="w-full rounded-2xl border border-white/10">
-                        <div className="min-w-[34rem] sm:min-w-[42rem]">
+                        <div className="min-w-136 sm:min-w-2xl">
                           <Table>
                             <TableHeader>
                               <TableRow className="border-white/10">
@@ -1153,7 +1150,7 @@ export function BunkxApp() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <ScrollArea className="h-[20rem] rounded-2xl border border-white/10 sm:h-[24rem]">
+                      <ScrollArea className="h-80 rounded-2xl border border-white/10 sm:h-96">
                         <Table>
                           <TableHeader>
                             <TableRow className="border-white/10">
@@ -1252,7 +1249,7 @@ export function BunkxApp() {
                             </Button>
                           </div>
                         </div>
-                        <ScrollArea className="h-[18rem] rounded-2xl border border-white/10 sm:h-[22rem]">
+                        <ScrollArea className="h-72 rounded-2xl border border-white/10 sm:h-88">
                           <Table>
                             <TableHeader>
                               <TableRow className="border-white/10">
@@ -1388,8 +1385,8 @@ export function BunkxApp() {
                           </CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <div className="h-[20rem] overflow-auto rounded-2xl border border-white/10 sm:h-[30rem]">
-                            <div className="min-w-[52rem]">
+                          <div className="h-80 overflow-auto rounded-2xl border border-white/10 sm:h-120">
+                            <div className="min-w-208">
                               <Table>
                                 <TableHeader>
                                   <TableRow className="border-white/10">
@@ -1569,7 +1566,7 @@ export function BunkxApp() {
                         <Textarea
                           value={deferredText}
                           readOnly
-                          className="min-h-[16rem] resize-none border-white/10 bg-black/20 font-mono text-xs leading-6 sm:min-h-[20rem]"
+                          className="min-h-64 resize-none border-white/10 bg-black/20 font-mono text-xs leading-6 sm:min-h-80"
                         />
                       </CardContent>
                     </Card>
