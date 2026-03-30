@@ -105,6 +105,12 @@ type PersistedState = {
   defaultMaxDl: number
 }
 
+type BunkxSessionReadResponse = {
+  sid: string
+  expiresAt: string
+  bunkdata: string
+}
+
 function todayIso() {
   const now = new Date()
   const offset = now.getTimezoneOffset()
@@ -321,6 +327,11 @@ function decodeBunkDataFromQuery(value: string) {
   return JSON.parse(decoded) as unknown
 }
 
+function parseFetchDataFromEncodedBunkData(encodedValue: string) {
+  const decodedPayload = decodeBunkDataFromQuery(encodedValue)
+  return buildFetchDataFromBunkData(decodedPayload)
+}
+
 function downloadFile(filename: string, contents: string, type: string) {
   const url = URL.createObjectURL(new Blob([contents], { type }))
   const anchor = document.createElement("a")
@@ -482,64 +493,140 @@ export function BunkxApp() {
   const deferredText = useDeferredValue(plannerResult?.planner_text ?? "")
 
   useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search)
-      const encodedBunkData = params.get("bunkdata")
-      if (encodedBunkData) {
-        try {
-          const decodedPayload = decodeBunkDataFromQuery(encodedBunkData)
-          const parsedFetchData = buildFetchDataFromBunkData(decodedPayload)
+    let cancelled = false
 
-          if (!parsedFetchData) {
-            throw new Error("Invalid bunkdata payload.")
-          }
-
-          setFetchData(parsedFetchData)
-          setPlannerResult(null)
-          setEventDates([])
-          setEventDraft("")
-          setManualEntries([makeManualEntry()])
-          setSelectedNotMarkedIds([])
-          setCourseLimits(mergeCourseLimits(parsedFetchData.default_course_limits, []))
-          setCutoffDate(todayIso())
-          setLookbackDays([4])
-          setDefaultMaxDl(8)
-          setFetchError(null)
-          setPlannerError(null)
-
-          const cleanedUrl = `${window.location.pathname}${window.location.hash}`
-          window.history.replaceState({}, "", cleanedUrl)
-          toast.success("Loaded bunk data from app link.")
-          setHasHydrated(true)
-          return
-        } catch (error) {
-          console.error("Unable to parse bunkdata. Falling back to normal flow.", error)
-          setFetchError("Invalid bunkdata link. Use normal login or a valid app link.")
-        }
-      }
-
-      const raw = window.sessionStorage.getItem(STORAGE_KEY)
-      if (!raw) {
-        setHasHydrated(true)
+    const applyHydratedFetchData = (parsedFetchData: AttendanceFetchResponse) => {
+      if (cancelled) {
         return
       }
 
-      const persisted = JSON.parse(raw) as PersistedState
-      setFetchData(persisted.fetchData)
-      setPlannerResult(persisted.plannerResult)
-      setEventDates(persisted.eventDates || [])
-      setManualEntries(
-        persisted.manualEntries?.length ? persisted.manualEntries : [makeManualEntry()]
-      )
-      setSelectedNotMarkedIds(persisted.selectedNotMarkedIds || [])
-      setCourseLimits(persisted.courseLimits || [])
-      setCutoffDate(persisted.cutoffDate || todayIso())
-      setLookbackDays([persisted.lookbackDays ?? 4])
-      setDefaultMaxDl(persisted.defaultMaxDl ?? 8)
-    } catch (error) {
-      console.error("Unable to restore session", error)
-    } finally {
-      setHasHydrated(true)
+      setFetchData(parsedFetchData)
+      setPlannerResult(null)
+      setEventDates([])
+      setEventDraft("")
+      setManualEntries([makeManualEntry()])
+      setSelectedNotMarkedIds([])
+      setCourseLimits(mergeCourseLimits(parsedFetchData.default_course_limits, []))
+      setCutoffDate(todayIso())
+      setLookbackDays([4])
+      setDefaultMaxDl(8)
+      setFetchError(null)
+      setPlannerError(null)
+    }
+
+    const runHydration = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search)
+
+        const sid = params.get("sid")?.trim()
+        if (sid) {
+          try {
+            const response = await fetch(`/api/bunkx/session/${encodeURIComponent(sid)}`, {
+              cache: "no-store",
+            })
+
+            if (!response.ok) {
+              if (response.status === 404) {
+                throw new Error("Session link is invalid or no longer available.")
+              }
+
+              if (response.status === 410) {
+                throw new Error("Session link expired. Generate a new short link.")
+              }
+
+              throw new Error(await parseError(response))
+            }
+
+            const sessionPayload = await parseResponse<BunkxSessionReadResponse>(response)
+            const encodedBunkData = sessionPayload?.bunkdata
+            if (!encodedBunkData) {
+              throw new Error("Session payload is missing bunkdata.")
+            }
+
+            const parsedFetchData = parseFetchDataFromEncodedBunkData(encodedBunkData)
+            if (!parsedFetchData) {
+              throw new Error("Invalid bunkdata payload.")
+            }
+
+            applyHydratedFetchData(parsedFetchData)
+
+            const cleanedUrl = `${window.location.pathname}${window.location.hash}`
+            window.history.replaceState({}, "", cleanedUrl)
+            toast.success("Loaded bunk data from short link.")
+            if (!cancelled) {
+              setHasHydrated(true)
+            }
+            return
+          } catch (error) {
+            console.error("Unable to resolve sid. Falling back to normal flow.", error)
+            setFetchError(
+              error instanceof Error
+                ? error.message
+                : "Invalid sid link. Use normal login or a valid app link."
+            )
+          }
+        }
+
+        const encodedBunkData = params.get("bunkdata")
+        if (encodedBunkData) {
+          try {
+            const parsedFetchData = parseFetchDataFromEncodedBunkData(encodedBunkData)
+
+            if (!parsedFetchData) {
+              throw new Error("Invalid bunkdata payload.")
+            }
+
+            applyHydratedFetchData(parsedFetchData)
+
+            const cleanedUrl = `${window.location.pathname}${window.location.hash}`
+            window.history.replaceState({}, "", cleanedUrl)
+            toast.success("Loaded bunk data from app link.")
+            if (!cancelled) {
+              setHasHydrated(true)
+            }
+            return
+          } catch (error) {
+            console.error("Unable to parse bunkdata. Falling back to normal flow.", error)
+            setFetchError("Invalid bunkdata link. Use normal login or a valid app link.")
+          }
+        }
+
+        const raw = window.sessionStorage.getItem(STORAGE_KEY)
+        if (!raw) {
+          if (!cancelled) {
+            setHasHydrated(true)
+          }
+          return
+        }
+
+        const persisted = JSON.parse(raw) as PersistedState
+        if (cancelled) {
+          return
+        }
+        setFetchData(persisted.fetchData)
+        setPlannerResult(persisted.plannerResult)
+        setEventDates(persisted.eventDates || [])
+        setManualEntries(
+          persisted.manualEntries?.length ? persisted.manualEntries : [makeManualEntry()]
+        )
+        setSelectedNotMarkedIds(persisted.selectedNotMarkedIds || [])
+        setCourseLimits(persisted.courseLimits || [])
+        setCutoffDate(persisted.cutoffDate || todayIso())
+        setLookbackDays([persisted.lookbackDays ?? 4])
+        setDefaultMaxDl(persisted.defaultMaxDl ?? 8)
+      } catch (error) {
+        console.error("Unable to restore session", error)
+      } finally {
+        if (!cancelled) {
+          setHasHydrated(true)
+        }
+      }
+    }
+
+    void runHydration()
+
+    return () => {
+      cancelled = true
     }
   }, [])
 
