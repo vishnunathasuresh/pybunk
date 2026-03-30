@@ -206,35 +206,37 @@ function normalizeBunkRows(value: unknown): AttendanceRow[] {
     return []
   }
 
-  return value
-    .map((row, index) => {
-      if (!row || typeof row !== "object") {
-        return null
-      }
+  const rows: AttendanceRow[] = []
 
-      const source = row as Record<string, unknown>
-      const periodDate = toOptionalString(source.period_date ?? source.pd)
-      const sessionTime = toOptionalString(source.session_time ?? source.st)
-      const courseCode = toOptionalString(source.course_code ?? source.cc)
-      const subjectName = toOptionalString(source.subject_name ?? source.sn)
-      const faculty = toOptionalString(source.faculty ?? source.f)
-      const score = toOptionalString(source.score ?? source.s)
-      const recordId = toOptionalString(source.record_id ?? source.id)
-      const mergedCourse = [courseCode, subjectName].filter(Boolean).join(" ").trim()
+  for (const [index, row] of value.entries()) {
+    if (!row || typeof row !== "object") {
+      continue
+    }
 
-      return {
-        record_id: recordId || `rec_${index + 1}`,
-        period_date: periodDate,
-        session_time: sessionTime,
-        course_code: courseCode,
-        subject_name: subjectName,
-        faculty,
-        faculty_email: toOptionalString(source.faculty_email) || "",
-        course: toOptionalString(source.course) || (mergedCourse || null),
-        score,
-      }
+    const source = row as Record<string, unknown>
+    const periodDate = toOptionalString(source.period_date ?? source.pd)
+    const sessionTime = toOptionalString(source.session_time ?? source.st)
+    const courseCode = toOptionalString(source.course_code ?? source.cc)
+    const subjectName = toOptionalString(source.subject_name ?? source.sn)
+    const faculty = toOptionalString(source.faculty ?? source.f)
+    const score = toOptionalString(source.score ?? source.s)
+    const recordId = toOptionalString(source.record_id ?? source.id)
+    const mergedCourse = [courseCode, subjectName].filter(Boolean).join(" ").trim()
+
+    rows.push({
+      record_id: recordId || `rec_${index + 1}`,
+      period_date: periodDate,
+      session_time: sessionTime,
+      course_code: courseCode,
+      subject_name: subjectName,
+      faculty,
+      faculty_email: toOptionalString(source.faculty_email) || "",
+      course: toOptionalString(source.course) || (mergedCourse || null),
+      score,
     })
-    .filter((row): row is AttendanceRow => Boolean(row))
+  }
+
+  return rows
 }
 
 function deriveCourseCatalog(rows: AttendanceRow[]) {
