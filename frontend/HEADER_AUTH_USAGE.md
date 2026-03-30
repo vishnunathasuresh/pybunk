@@ -51,3 +51,65 @@ A normal URL link cannot carry custom headers safely. For app-to-web launch:
 3. Server validates code, sets an HttpOnly secure session cookie, redirects to main page.
 
 This avoids exposing passwords in links while still allowing direct entry.
+
+## Direct Bunk Data Link (No Auth Handshake)
+
+If your app already scraped attendance data, you can skip credential auth and open:
+
+`/bunkialo?bunkdata=<base64-json>`
+
+The web app decodes `bunkdata`, hydrates the planner state, and opens directly in the main workspace.
+
+### JSON Shape Expected In `bunkdata`
+
+At minimum, include `attendance_rows`.
+
+```json
+{
+  "attendance_rows": [
+    {
+      "record_id": "rec_1",
+      "period_date": "2026-03-11",
+      "session_time": "2PM - 3PM",
+      "course_code": "ICS222",
+      "subject_name": "Object-Oriented Analysis and Design",
+      "faculty": "Jisha Mariyam John",
+      "faculty_email": "faculty@example.com",
+      "course": "ICS222 Object-Oriented Analysis and Design",
+      "score": "0/1"
+    }
+  ],
+  "dataset_id": "optional-external-id",
+  "dataset_expires_at": "2026-03-31T10:15:00.000Z"
+}
+```
+
+### Scraper Fields To Send
+
+For each attendance row, scrape and send:
+
+- `period_date` as ISO date (`YYYY-MM-DD`)
+- `session_time`
+- `course_code`
+- `subject_name`
+- `faculty`
+- `faculty_email`
+- `course` (optional; can be `course_code + subject_name`)
+- `score` (`0/1`, `1/1`, `?/1`, etc.)
+
+Optional but recommended:
+
+- `record_id` (if omitted, web app auto-generates `rec_1`, `rec_2`, ...)
+
+Derived automatically by web app:
+
+- `summary`
+- `course_catalog`
+- `default_course_limits` (default `max_dl = 8`)
+- `not_marked_rows` (from rows where `score = ?/1`)
+
+### Encoding Notes
+
+- Use UTF-8 JSON string -> Base64 encode.
+- URL-encode the Base64 string before appending to query parameter.
+- URL-safe Base64 (`-` and `_`) is accepted.

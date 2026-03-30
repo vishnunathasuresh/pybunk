@@ -75,6 +75,7 @@ import {
 } from "@/components/ui/tooltip"
 import type {
   ApiErrorResponse,
+  AttendanceRow,
   AttendanceFetchResponse,
   CourseLimitInput,
   PlannerGenerateRequest,
@@ -164,6 +165,127 @@ function mergeCourseLimits(
       max_dl: prior?.max_dl ?? course.max_dl,
     }
   })
+}
+
+function toOptionalString(value: unknown) {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
+function normalizeBunkRows(value: unknown): AttendanceRow[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((row, index) => {
+      if (!row || typeof row !== "object") {
+        return null
+      }
+
+      const source = row as Record<string, unknown>
+      const courseCode = toOptionalString(source.course_code)
+      const subjectName = toOptionalString(source.subject_name)
+      const mergedCourse = [courseCode, subjectName].filter(Boolean).join(" ").trim()
+
+      return {
+        record_id: toOptionalString(source.record_id) || `rec_${index + 1}`,
+        period_date: toOptionalString(source.period_date),
+        session_time: toOptionalString(source.session_time),
+        course_code: courseCode,
+        subject_name: subjectName,
+        faculty: toOptionalString(source.faculty),
+        faculty_email: toOptionalString(source.faculty_email),
+        course: toOptionalString(source.course) || (mergedCourse || null),
+        score: toOptionalString(source.score),
+      }
+    })
+    .filter((row): row is AttendanceRow => Boolean(row))
+}
+
+function deriveCourseCatalog(rows: AttendanceRow[]) {
+  const byKey = new Map<string, AttendanceFetchResponse["course_catalog"][number]>()
+
+  for (const row of rows) {
+    const key = [row.course_code ?? "", row.subject_name ?? "", row.faculty_email ?? ""].join("::")
+    if (!key.replace(/:/g, "")) {
+      continue
+    }
+
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        course_code: row.course_code,
+        subject_name: row.subject_name,
+        faculty: row.faculty,
+        faculty_email: row.faculty_email,
+        course: row.course,
+      })
+    }
+  }
+
+  return [...byKey.values()].sort((left, right) =>
+    (left.course_code ?? "").localeCompare(right.course_code ?? "")
+  )
+}
+
+function buildFetchDataFromBunkData(value: unknown): AttendanceFetchResponse | null {
+  if (!value || typeof value !== "object") {
+    return null
+  }
+
+  const payload = value as Record<string, unknown>
+  const attendanceRows = normalizeBunkRows(payload.attendance_rows)
+  if (!attendanceRows.length) {
+    return null
+  }
+
+  const courseCatalog = deriveCourseCatalog(attendanceRows)
+  const notMarkedRows = attendanceRows
+    .filter((row) => row.score === "?/1")
+    .map((row) => ({
+      ...row,
+      date: (() => {
+        const parsed = parseJsonDate(row.period_date)
+        return parsed ? format(parsed, "dd-MM-yyyy") : null
+      })(),
+    }))
+  const defaultCourseLimits = courseCatalog
+    .filter((course) => course.course_code)
+    .map((course) => ({
+      course_code: course.course_code as string,
+      subject_name: course.subject_name,
+      max_dl: 8,
+    }))
+
+  return {
+    dataset_id: toOptionalString(payload.dataset_id) || "external-bunkdata",
+    dataset_expires_at:
+      toOptionalString(payload.dataset_expires_at) ||
+      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    summary: {
+      attendance_rows: attendanceRows.length,
+      course_count: new Set(
+        attendanceRows.map((row) => row.course_code).filter(Boolean)
+      ).size,
+      leave_rows: attendanceRows.filter((row) => row.score === "0/1").length,
+      not_marked_rows: notMarkedRows.length,
+    },
+    attendance_rows: attendanceRows,
+    course_catalog: courseCatalog,
+    default_course_limits: defaultCourseLimits,
+    not_marked_rows: notMarkedRows,
+  }
+}
+
+function decodeBunkDataFromQuery(value: string) {
+  const normalized = decodeURIComponent(value).replace(/-/g, "+").replace(/_/g, "/")
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")
+  const decoded = atob(padded)
+  return JSON.parse(decoded) as unknown
 }
 
 function downloadFile(filename: string, contents: string, type: string) {
@@ -328,6 +450,41 @@ export function BunkxApp() {
 
   useEffect(() => {
     try {
+      const params = new URLSearchParams(window.location.search)
+      const encodedBunkData = params.get("bunkdata")
+      if (encodedBunkData) {
+        try {
+          const decodedPayload = decodeBunkDataFromQuery(encodedBunkData)
+          const parsedFetchData = buildFetchDataFromBunkData(decodedPayload)
+
+          if (!parsedFetchData) {
+            throw new Error("Invalid bunkdata payload.")
+          }
+
+          setFetchData(parsedFetchData)
+          setPlannerResult(null)
+          setEventDates([])
+          setEventDraft("")
+          setManualEntries([makeManualEntry()])
+          setSelectedNotMarkedIds([])
+          setCourseLimits(mergeCourseLimits(parsedFetchData.default_course_limits, []))
+          setCutoffDate(todayIso())
+          setLookbackDays([4])
+          setDefaultMaxDl(8)
+          setFetchError(null)
+          setPlannerError(null)
+
+          const cleanedUrl = `${window.location.pathname}${window.location.hash}`
+          window.history.replaceState({}, "", cleanedUrl)
+          toast.success("Loaded bunk data from app link.")
+          setHasHydrated(true)
+          return
+        } catch (error) {
+          console.error("Unable to parse bunkdata. Falling back to normal flow.", error)
+          setFetchError("Invalid bunkdata link. Use normal login or a valid app link.")
+        }
+      }
+
       const raw = window.sessionStorage.getItem(STORAGE_KEY)
       if (!raw) {
         setHasHydrated(true)
