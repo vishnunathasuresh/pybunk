@@ -176,6 +176,31 @@ function toOptionalString(value: unknown) {
   return trimmed ? trimmed : null
 }
 
+function toIsoDateTime(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const numeric = Number(trimmed)
+    if (Number.isFinite(numeric) && /^\d+$/.test(trimmed)) {
+      const parsed = new Date(numeric)
+      return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+    }
+
+    const parsed = new Date(trimmed)
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+  }
+
+  return null
+}
+
 function normalizeBunkRows(value: unknown): AttendanceRow[] {
   if (!Array.isArray(value)) {
     return []
@@ -188,20 +213,25 @@ function normalizeBunkRows(value: unknown): AttendanceRow[] {
       }
 
       const source = row as Record<string, unknown>
-      const courseCode = toOptionalString(source.course_code)
-      const subjectName = toOptionalString(source.subject_name)
+      const periodDate = toOptionalString(source.period_date ?? source.pd)
+      const sessionTime = toOptionalString(source.session_time ?? source.st)
+      const courseCode = toOptionalString(source.course_code ?? source.cc)
+      const subjectName = toOptionalString(source.subject_name ?? source.sn)
+      const faculty = toOptionalString(source.faculty ?? source.f)
+      const score = toOptionalString(source.score ?? source.s)
+      const recordId = toOptionalString(source.record_id ?? source.id)
       const mergedCourse = [courseCode, subjectName].filter(Boolean).join(" ").trim()
 
       return {
-        record_id: toOptionalString(source.record_id) || `rec_${index + 1}`,
-        period_date: toOptionalString(source.period_date),
-        session_time: toOptionalString(source.session_time),
+        record_id: recordId || `rec_${index + 1}`,
+        period_date: periodDate,
+        session_time: sessionTime,
         course_code: courseCode,
         subject_name: subjectName,
-        faculty: toOptionalString(source.faculty),
-        faculty_email: toOptionalString(source.faculty_email),
+        faculty,
+        faculty_email: toOptionalString(source.faculty_email) || "",
         course: toOptionalString(source.course) || (mergedCourse || null),
-        score: toOptionalString(source.score),
+        score,
       }
     })
     .filter((row): row is AttendanceRow => Boolean(row))
@@ -238,7 +268,7 @@ function buildFetchDataFromBunkData(value: unknown): AttendanceFetchResponse | n
   }
 
   const payload = value as Record<string, unknown>
-  const attendanceRows = normalizeBunkRows(payload.attendance_rows)
+  const attendanceRows = normalizeBunkRows(payload.attendance_rows ?? payload.ar)
   if (!attendanceRows.length) {
     return null
   }
@@ -262,9 +292,10 @@ function buildFetchDataFromBunkData(value: unknown): AttendanceFetchResponse | n
     }))
 
   return {
-    dataset_id: toOptionalString(payload.dataset_id) || "external-bunkdata",
+    dataset_id:
+      toOptionalString(payload.dataset_id ?? payload.di) || "external-bunkdata",
     dataset_expires_at:
-      toOptionalString(payload.dataset_expires_at) ||
+      toIsoDateTime(payload.dataset_expires_at ?? payload.de) ||
       new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     summary: {
       attendance_rows: attendanceRows.length,

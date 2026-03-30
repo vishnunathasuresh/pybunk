@@ -64,6 +64,21 @@ The web app decodes `bunkdata`, hydrates the planner state, and opens directly i
 
 At minimum, include `attendance_rows`.
 
+Compressed mobile format is also supported.
+
+Field mapping:
+
+- `ar` -> `attendance_rows`
+- `pd` -> `period_date`
+- `st` -> `session_time`
+- `cc` -> `course_code`
+- `sn` -> `subject_name`
+- `f` -> `faculty`
+- `s` -> `score`
+- `id` -> `record_id`
+- `di` -> `dataset_id`
+- `de` -> `dataset_expires_at` (unix milliseconds or ISO string)
+
 ```json
 {
   "attendance_rows": [
