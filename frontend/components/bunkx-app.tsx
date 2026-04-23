@@ -10,6 +10,7 @@ import {
   Copy,
   Download,
   GraduationCap,
+  Lightbulb,
   LogOut,
   Plus,
   RefreshCcw,
@@ -73,6 +74,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { ThemeToggle } from "@/components/theme-toggle"
 import type {
   ApiErrorResponse,
   AttendanceRow,
@@ -420,7 +422,7 @@ function DatePickerButton({
         <Button
           type="button"
           variant="outline"
-          className="w-full justify-between border-white/10 bg-white/5 text-left text-sm text-foreground hover:bg-white/8"
+          className="h-11 w-full justify-between border-white/10 bg-white/5 text-left text-sm text-foreground hover:bg-white/8"
         >
           <span className={cn(!value && "text-muted-foreground")}>
             {value ? displayDate(value) : placeholder}
@@ -428,7 +430,12 @@ function DatePickerButton({
           <CalendarIcon className="size-4 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto border-white/10 bg-popover/95 p-0">
+      <PopoverContent
+        align="start"
+        sideOffset={8}
+        collisionPadding={12}
+        className="w-[min(92vw,22rem)] border-white/10 bg-popover/95 p-0"
+      >
         <PopoverHeader className="p-3 pb-0">
           <PopoverTitle>Select date</PopoverTitle>
         </PopoverHeader>
@@ -472,6 +479,7 @@ export function BunkxApp() {
   )
   const [eventDates, setEventDates] = useState<string[]>([])
   const [eventDraft, setEventDraft] = useState("")
+  const [isEventPickerOpen, setIsEventPickerOpen] = useState(false)
   const [manualEntries, setManualEntries] = useState<ManualEntryDraft[]>([
     makeManualEntry(),
   ])
@@ -486,8 +494,7 @@ export function BunkxApp() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [hasHydrated, setHasHydrated] = useState(false)
-  const [mobileConfigSection, setMobileConfigSection] = useState("basics")
-  const [mobileResultSection, setMobileResultSection] = useState("overview")
+  const [mobileResultSection, setMobileResultSection] = useState("preview")
 
   const deferredRows = useDeferredValue(plannerResult?.planner_rows ?? [])
   const deferredText = useDeferredValue(plannerResult?.planner_text ?? "")
@@ -817,6 +824,7 @@ export function BunkxApp() {
 
     setEventDates((current) => uniqueSortedDates([...current, eventDraft]))
     setEventDraft("")
+    setIsEventPickerOpen(false)
   }
 
   function removeEventDate(date: string) {
@@ -880,10 +888,23 @@ export function BunkxApp() {
     <main className="relative overflow-hidden">
       {isFetching ? <LoadingOverlay /> : null}
 
-      <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+      {/* Header with theme toggle */}
+      <header className="sticky top-0 z-40 border-b border-border/40 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-br from-primary to-primary/60 text-primary-foreground font-bold text-sm">
+              B
+            </div>
+            <span className="font-semibold text-sm sm:text-base">BunkX</span>
+          </div>
+          <ThemeToggle />
+        </div>
+      </header>
+
+      <div className="mx-auto flex min-h-[calc(100svh-3.5rem)] w-full max-w-7xl flex-col px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
         {!fetchData ? (
           <section className="grid min-h-[calc(100svh-2rem)] items-stretch gap-4 sm:gap-6 lg:min-h-[calc(100svh-3rem)] lg:grid-cols-[1.15fr_0.85fr]">
-            <Card className="order-2 glass-panel subtle-grid relative overflow-hidden rounded-[2rem] border-white/10 bg-card/70 lg:order-1">
+            <Card className="order-2 glass-panel subtle-grid relative overflow-hidden rounded-2xl border border-border bg-card/50 lg:order-1">
               <CardContent className="flex h-full flex-col justify-between p-6 sm:p-8 lg:p-10">
                 <div className="space-y-6">
                   <Badge
@@ -1021,9 +1042,149 @@ export function BunkxApp() {
             </Card>
           </section>
         ) : (
-          <section className="space-y-6 pb-10">
-            <Card className="glass-panel overflow-hidden rounded-[2rem] border-white/10 bg-card/75">
-              <CardContent className="p-5 sm:p-8">
+          <section className="space-y-6 pb-28 sm:space-y-7 sm:pb-10">
+            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+              {/* Critical Event Selection Section */}
+              <Card className="glass-panel w-full overflow-hidden rounded-[1.8rem] border border-border/70 bg-linear-to-br from-card/94 via-card/88 to-card/84 shadow-[0_20px_48px_-30px_rgb(15_23_42/0.5)]">
+                <CardHeader className="px-5 pb-3 pt-5 sm:px-6 sm:pb-4 sm:pt-6">
+                <div className="space-y-2">
+                  <Badge className="inline-flex h-8 items-center gap-2 rounded-full border border-primary/30 bg-primary/12 px-3 text-primary">
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-primary/55 bg-background/80 px-1 text-[11px] font-semibold leading-none">1</span>
+                    Step
+                  </Badge>
+                  <CardTitle className="text-[1.9rem] leading-tight tracking-tight">Event dates</CardTitle>
+                  <CardDescription className="text-sm leading-6">Add key dates first.</CardDescription>
+                </div>
+                </CardHeader>
+                <CardContent className="space-y-4 px-5 pb-5 pt-1 sm:px-6 sm:pb-6">
+                  <div className="grid gap-3 xl:grid-cols-[15rem_minmax(0,1fr)] xl:items-start xl:gap-4">
+                    <Popover open={isEventPickerOpen} onOpenChange={setIsEventPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button className="h-11 w-full justify-center rounded-full px-5" variant="default">
+                          <CalendarIcon className="size-4" />
+                          Pick event date
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        sideOffset={10}
+                        collisionPadding={12}
+                        className="glass-panel w-[min(92vw,22rem)] border-white/10 bg-card/95 p-0"
+                      >
+                        <PopoverHeader className="border-b border-white/10 px-4 py-3">
+                          <PopoverTitle>
+                            Add an event date
+                          </PopoverTitle>
+                        </PopoverHeader>
+                        <div className="space-y-4 p-4">
+                          <Calendar
+                            mode="single"
+                            selected={eventDraft ? parseISO(eventDraft) : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                const iso = format(date, "yyyy-MM-dd")
+                                setEventDraft(iso)
+                              }
+                            }}
+                            disabled={(date) =>
+                              date > new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+                            }
+                            className="mx-auto rounded-lg border border-white/10"
+                          />
+                          <Button
+                            onClick={addEventDate}
+                            disabled={!eventDraft}
+                            className="h-10 w-full rounded-lg"
+                          >
+                            <Plus className="size-3" />
+                            Add event
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+
+                    <div className="min-h-11 rounded-xl border border-border/60 bg-card/45 px-3 py-2.5 xl:min-h-11 xl:self-center xl:py-2">
+                      {eventDates.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {eventDates.map((date) => (
+                            <Badge
+                              key={date}
+                              variant="secondary"
+                              className="gap-1.5 rounded-lg pl-2.5 pr-1.5"
+                            >
+                              {format(parseISO(date), "MMM dd")}
+                              <button
+                                onClick={() => removeEventDate(date)}
+                                className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded hover:bg-white/20"
+                              >
+                                ×
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs leading-6 text-muted-foreground">No dates selected</p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-panel overflow-hidden rounded-[1.25rem] border-white/10 bg-card/70 lg:hidden">
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold tracking-tight">Planner workspace</p>
+                      <p className="text-xs text-muted-foreground">
+                        cache until {displayDateTime(fetchData.dataset_expires_at)}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="border-primary/30 bg-primary/10 px-2.5 text-xs text-primary"
+                    >
+                      BunkX
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9 border-white/10 bg-white/5 px-2"
+                      onClick={handleFetchAttendance}
+                      disabled={isFetching}
+                    >
+                      <RefreshCcw className="size-3.5" />
+                      Refresh
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9 border-white/10 bg-white/5 px-2"
+                      onClick={resetPlannerWorkspace}
+                    >
+                      <Trash2 className="size-3.5" />
+                      Reset
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 px-2"
+                      onClick={resetSession}
+                    >
+                      <LogOut className="size-3.5" />
+                      Switch
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-panel hidden overflow-hidden rounded-[2rem] border-white/10 bg-card/75 lg:block">
+                <CardContent className="p-5 sm:p-6 lg:p-7">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-4">
                     <div className="flex flex-wrap items-center gap-3">
@@ -1072,8 +1233,9 @@ export function BunkxApp() {
                     </Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
 
             <div className="hidden gap-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard
@@ -1100,25 +1262,31 @@ export function BunkxApp() {
 
             <div className="space-y-6 pt-2">
               <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
-                <CardContent className="flex flex-col gap-4 p-4 sm:p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="space-y-2">
-                    <h2 className="text-xl font-semibold tracking-tight">
-                      Plan configuration
-                    </h2>
-                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <Badge variant="outline" className="border-white/10 bg-white/5">
-                        {eventDates.length} event dates
+                <CardHeader className="px-5 pb-4 pt-5 sm:px-6 sm:pb-4 sm:pt-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <Badge className="mb-2 inline-flex h-8 items-center gap-2 rounded-full border border-primary/30 bg-primary/12 px-2.5 text-primary">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-primary/55 bg-background/70 text-[11px] font-semibold leading-none">2</span>
+                        Step 2
                       </Badge>
-                      <Badge variant="outline" className="border-white/10 bg-white/5">
-                        {manualEntries.filter((entry) => entry.date && entry.course_code).length} manual rows
-                      </Badge>
-                      <Badge variant="outline" className="border-white/10 bg-white/5">
-                        {selectedNotMarkedIds.length} not marked selected
-                      </Badge>
-                      <Badge variant="outline" className="border-white/10 bg-white/5">
-                        lookback {lookbackDays[0]} days
-                      </Badge>
+                      <CardTitle className="text-xl">Fine-tune your plan</CardTitle>
+                      <CardDescription className="text-sm">
+                        Use the sections below for manual bunks and not-marked rows. Open Configure for advanced limits.
+                      </CardDescription>
                     </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4 p-4 sm:p-5 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="hidden sm:flex flex-wrap gap-2 text-xs">
+                    <Badge variant="outline" className="border-white/10 bg-white/5">
+                      {manualEntries.filter((entry) => entry.date && entry.course_code).length} manual added
+                    </Badge>
+                    <Badge variant="outline" className="border-white/10 bg-white/5">
+                      {selectedNotMarkedIds.length} not marked
+                    </Badge>
+                    <Badge variant="outline" className="border-white/10 bg-white/5">
+                      lookback {lookbackDays[0]}d
+                    </Badge>
                   </div>
                   <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
                     <Button
@@ -1128,368 +1296,213 @@ export function BunkxApp() {
                       onClick={() => setIsConfigOpen(true)}
                     >
                       <SlidersHorizontal className="size-4" />
-                      Configure plan
+                      Configure
                     </Button>
                     <Button
                       type="button"
-                      className="w-full rounded-xl sm:w-auto"
+                      className="hidden w-full rounded-xl sm:inline-flex sm:w-auto"
                       onClick={generatePlannerWithFallback}
                       disabled={isGenerating}
                     >
                       {isGenerating ? (
                         <>
                           <Spinner className="size-4" />
-                          Generating plan
+                          Generating
                         </>
                       ) : (
                         <>
                           <Sparkles className="size-4" />
-                          Generate plan
+                          Generate
                         </>
                       )}
                     </Button>
                   </div>
                 </CardContent>
               </Card>
-              <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-                <DialogContent className="glass-panel max-h-svh w-[calc(100vw-1rem)] max-w-6xl overflow-hidden border-white/10 bg-card/95 p-0 sm:max-h-[88svh] sm:w-full sm:max-w-6xl">
-                  <DialogHeader className="border-b border-white/10 px-4 py-4 sm:px-6 sm:py-5">
-                    <DialogTitle className="text-xl">Plan configuration</DialogTitle>
-                    <DialogDescription>
-                      All planning options are here, without crowding the main workspace.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <ScrollArea className="max-h-[calc(100svh-5rem)] px-4 py-4 sm:max-h-[calc(88svh-6rem)] sm:px-6 sm:py-6">
-                    <div className="space-y-4 pr-0 sm:space-y-6 sm:pr-2">
-                <Tabs
-                  value={mobileConfigSection}
-                  onValueChange={setMobileConfigSection}
-                  className="sm:hidden"
-                >
-                  <TabsList className="grid w-full grid-cols-3 bg-background/60">
-                    <TabsTrigger value="basics">Basics</TabsTrigger>
-                    <TabsTrigger value="manual">Manual</TabsTrigger>
-                    <TabsTrigger value="review">Review</TabsTrigger>
-                  </TabsList>
-                </Tabs>
 
-                <div
-                  className={cn(
-                    "grid gap-4 sm:gap-6 xl:grid-cols-[1.1fr_0.9fr]",
-                    mobileConfigSection !== "basics" && "hidden sm:grid"
-                  )}
-                >
-                  <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
-                    <CardHeader>
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <CardTitle className="text-xl">Event dates</CardTitle>
-                          <CardDescription>
-                            Leave this empty to let the planner use all current bunk
-                            candidates.
-                          </CardDescription>
-                        </div>
-                        <InfoHint text="Matches are generated from the selected event dates and the lookback window." />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex flex-col gap-3 sm:flex-row">
-                        <div className="flex-1">
-                          <DatePickerButton
-                            value={eventDraft}
-                            onChange={setEventDraft}
-                            placeholder="Pick an event date"
-                          />
-                        </div>
-                        <Button type="button" onClick={addEventDate} className="w-full sm:min-w-40 sm:w-auto">
-                          <Plus className="size-4" />
-                          Add event
-                        </Button>
-                      </div>
-                      <div className="flex min-h-16 flex-wrap gap-2 rounded-2xl border border-dashed border-white/10 bg-white/3 p-3">
-                        {eventDates.length ? (
-                          eventDates.map((date) => (
-                            <Badge
-                              key={date}
-                              variant="outline"
-                              className="gap-2 border-primary/30 bg-primary/10 px-3 py-1 text-primary"
+              <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+                <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
+                  <CardHeader>
+                    <CardTitle className="text-xl">Manual bunks</CardTitle>
+                    <CardDescription>
+                      Add dates that are not reflected on LMS yet.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-3 sm:hidden">
+                      {manualEntries.map((entry, index) => (
+                        <div
+                          key={entry.id}
+                          className="space-y-3 rounded-xl border border-white/10 bg-white/4 p-3"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Row {index + 1}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => removeManualEntry(entry.id)}
+                              aria-label="Remove manual bunk row"
                             >
-                              {displayDate(date)}
-                              <button
-                                type="button"
-                                onClick={() => removeEventDate(date)}
-                                className="rounded-full text-primary/80 transition hover:text-primary"
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
-                            </Badge>
-                          ))
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            Fallback mode is active. No event dates selected yet.
-                          </p>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
-                    <CardHeader>
-                      <CardTitle className="text-xl">Planner settings</CardTitle>
-                      <CardDescription>
-                        Control the cutoff date, lookback window, and default course cap.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Label>Cutoff date</Label>
-                          <InfoHint text="Only attendance records on or before this date are considered." />
-                        </div>
-                        <DatePickerButton
-                          value={cutoffDate}
-                          onChange={setCutoffDate}
-                          placeholder="Pick a cutoff date"
-                        />
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <Label>Days before event</Label>
-                            <InfoHint text="A leave counts if it falls on the event day or within this many days before it." />
+                              <Trash2 className="size-4" />
+                            </Button>
                           </div>
-                          <Badge variant="outline" className="border-white/10 bg-white/5">
-                            {lookbackDays[0]} days
-                          </Badge>
-                        </div>
-                        <Slider
-                          min={0}
-                          max={14}
-                          step={1}
-                          value={lookbackDays}
-                          onValueChange={setLookbackDays}
-                        />
-                      </div>
-
-                      <Separator className="bg-white/10" />
-
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor="default-max-dl">Default max DL per course</Label>
-                          <InfoHint text="Use this to seed new course limits or reapply a common cap across all courses." />
-                        </div>
-                        <div className="flex flex-col gap-3 sm:flex-row">
                           <Input
-                            id="default-max-dl"
-                            type="number"
-                            min={0}
-                            max={50}
-                            value={defaultMaxDl}
+                            type="date"
+                            value={entry.date}
                             onChange={(event) =>
-                              setDefaultMaxDl(Number(event.target.value) || 0)
+                              updateManualEntry(
+                                entry.id,
+                                "date",
+                                event.target.value
+                              )
                             }
-                            className="h-10 border-white/10 bg-white/5 sm:max-w-36"
+                            className="h-11 border-white/10 bg-white/5"
                           />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="border-white/10 bg-white/5"
-                            onClick={applyDefaultLimitToAll}
+                          <Select
+                            value={entry.course_code}
+                            onValueChange={(value) =>
+                              updateManualEntry(entry.id, "course_code", value)
+                            }
                           >
-                            Apply to all courses
-                          </Button>
+                            <SelectTrigger className="h-11 w-full border-white/10 bg-white/5">
+                              <SelectValue placeholder="Select course" />
+                            </SelectTrigger>
+                            <SelectContent className="border-white/10 bg-popover/95">
+                              {courseCatalog
+                                .filter((course) => course.course_code)
+                                .map((course) => (
+                                  <SelectItem
+                                    key={course.course_code}
+                                    value={course.course_code as string}
+                                  >
+                                    {course.course_code}{" "}
+                                    {course.subject_name
+                                      ? `- ${course.subject_name}`
+                                      : ""}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            value={entry.session_time}
+                            onChange={(event) =>
+                              updateManualEntry(
+                                entry.id,
+                                "session_time",
+                                event.target.value
+                              )
+                            }
+                            placeholder="Session time / note"
+                            className="h-11 border-white/10 bg-white/5"
+                          />
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                      ))}
+                    </div>
 
-                <div
-                  className={cn(
-                    "grid gap-4 sm:gap-6 xl:grid-cols-[1.15fr_0.85fr]",
-                    mobileConfigSection !== "manual" && "hidden sm:grid"
-                  )}
-                >
-                  <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
-                    <CardHeader>
-                      <CardTitle className="text-xl">Manual bunks</CardTitle>
-                      <CardDescription>
-                        Add dates that are not reflected on LMS yet.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <ScrollArea className="w-full rounded-2xl border border-white/10">
-                        <div className="min-w-136 sm:min-w-2xl">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="border-white/10">
-                                <TableHead>Date</TableHead>
-                                <TableHead>Course</TableHead>
-                                <TableHead>Session time / note</TableHead>
-                                <TableHead className="w-14 text-right"> </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {manualEntries.map((entry) => (
-                                <TableRow key={entry.id} className="border-white/10">
-                                  <TableCell className="min-w-32 sm:min-w-40">
-                                    <Input
-                                      type="date"
-                                      value={entry.date}
-                                      onChange={(event) =>
-                                        updateManualEntry(
-                                          entry.id,
-                                          "date",
-                                          event.target.value
-                                        )
-                                      }
-                                      className="border-white/10 bg-white/5"
-                                    />
-                                  </TableCell>
-                                  <TableCell className="min-w-40 sm:min-w-52">
-                                    <Select
-                                      value={entry.course_code}
-                                      onValueChange={(value) =>
-                                        updateManualEntry(entry.id, "course_code", value)
-                                      }
-                                    >
-                                      <SelectTrigger className="w-full border-white/10 bg-white/5">
-                                        <SelectValue placeholder="Select course" />
-                                      </SelectTrigger>
-                                      <SelectContent className="border-white/10 bg-popover/95">
-                                        {courseCatalog
-                                          .filter((course) => course.course_code)
-                                          .map((course) => (
-                                            <SelectItem
-                                              key={course.course_code}
-                                              value={course.course_code as string}
-                                            >
-                                              {course.course_code}{" "}
-                                              {course.subject_name
-                                                ? `- ${course.subject_name}`
-                                                : ""}
-                                            </SelectItem>
-                                          ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Input
-                                      value={entry.session_time}
-                                      onChange={(event) =>
-                                        updateManualEntry(
-                                          entry.id,
-                                          "session_time",
-                                          event.target.value
-                                        )
-                                      }
-                                      placeholder="2PM - 3PM or MANUAL BUNK"
-                                      className="border-white/10 bg-white/5"
-                                    />
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      onClick={() => removeManualEntry(entry.id)}
-                                    >
-                                      <Trash2 className="size-4" />
-                                    </Button>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </ScrollArea>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-white/10 bg-white/5"
-                        onClick={() =>
-                          setManualEntries((current) => [...current, makeManualEntry()])
-                        }
-                      >
-                        <Plus className="size-4" />
-                        Add manual bunk row
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
-                    <CardHeader>
-                      <CardTitle className="text-xl">Per-course DL limits</CardTitle>
-                      <CardDescription>
-                        Courses with a max DL of zero will be excluded from the plan.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ScrollArea className="h-80 rounded-2xl border border-white/10 sm:h-96">
+                    <ScrollArea className="hidden w-full rounded-2xl border border-white/10 sm:block">
+                      <div className="min-w-136 sm:min-w-2xl">
                         <Table>
                           <TableHeader>
                             <TableRow className="border-white/10">
+                              <TableHead>Date</TableHead>
                               <TableHead>Course</TableHead>
-                              <TableHead>Subject</TableHead>
-                              <TableHead className="w-28">Max DL</TableHead>
+                              <TableHead>Session time / note</TableHead>
+                              <TableHead className="w-14 text-right"> </TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {courseLimits.map((limit) => {
-                              const course = courseLookup.get(limit.course_code)
-                              return (
-                                <TableRow
-                                  key={limit.course_code}
-                                  className="border-white/10"
-                                >
-                                  <TableCell className="font-medium">
-                                    {limit.course_code}
-                                  </TableCell>
-                                  <TableCell className="text-muted-foreground">
-                                    {course?.subject_name || "Unknown subject"}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      max={50}
-                                      value={limit.max_dl}
-                                      onChange={(event) =>
-                                        setCourseLimits((current) =>
-                                          current.map((item) =>
-                                            item.course_code === limit.course_code
-                                              ? {
-                                                  ...item,
-                                                  max_dl: Math.max(
-                                                    0,
-                                                    Number(event.target.value) || 0
-                                                  ),
-                                                }
-                                              : item
-                                          )
-                                        )
-                                      }
-                                      className="border-white/10 bg-white/5"
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              )
-                            })}
+                            {manualEntries.map((entry) => (
+                              <TableRow key={entry.id} className="border-white/10">
+                                <TableCell className="min-w-32 sm:min-w-40">
+                                  <Input
+                                    type="date"
+                                    value={entry.date}
+                                    onChange={(event) =>
+                                      updateManualEntry(
+                                        entry.id,
+                                        "date",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="border-white/10 bg-white/5"
+                                  />
+                                </TableCell>
+                                <TableCell className="min-w-40 sm:min-w-52">
+                                  <Select
+                                    value={entry.course_code}
+                                    onValueChange={(value) =>
+                                      updateManualEntry(entry.id, "course_code", value)
+                                    }
+                                  >
+                                    <SelectTrigger className="w-full border-white/10 bg-white/5">
+                                      <SelectValue placeholder="Select course" />
+                                    </SelectTrigger>
+                                    <SelectContent className="border-white/10 bg-popover/95">
+                                      {courseCatalog
+                                        .filter((course) => course.course_code)
+                                        .map((course) => (
+                                          <SelectItem
+                                            key={course.course_code}
+                                            value={course.course_code as string}
+                                          >
+                                            {course.course_code}{" "}
+                                            {course.subject_name
+                                              ? `- ${course.subject_name}`
+                                              : ""}
+                                          </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={entry.session_time}
+                                    onChange={(event) =>
+                                      updateManualEntry(
+                                        entry.id,
+                                        "session_time",
+                                        event.target.value
+                                      )
+                                    }
+                                    placeholder="2PM - 3PM or MANUAL BUNK"
+                                    className="border-white/10 bg-white/5"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => removeManualEntry(entry.id)}
+                                  >
+                                    <Trash2 className="size-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
                           </TableBody>
                         </Table>
-                      </ScrollArea>
-                    </CardContent>
-                  </Card>
-                </div>
+                      </div>
+                    </ScrollArea>
 
-                <Card
-                  className={cn(
-                    "glass-panel rounded-[1.75rem] border-white/10 bg-card/75",
-                    mobileConfigSection !== "review" && "hidden sm:block"
-                  )}
-                >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 w-full border-white/10 bg-white/5 sm:w-auto"
+                      onClick={() =>
+                        setManualEntries((current) => [...current, makeManualEntry()])
+                      }
+                    >
+                      <Plus className="size-4" />
+                      Add manual bunk row
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="glass-panel rounded-[1.75rem] border-white/10 bg-card/75">
                   <CardHeader>
                     <CardTitle className="text-xl">Not marked leaves</CardTitle>
                     <CardDescription>
@@ -1499,7 +1512,7 @@ export function BunkxApp() {
                   <CardContent className="space-y-4">
                     {fetchData.not_marked_rows.length ? (
                       <>
-                        <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <Badge variant="outline" className="border-white/10 bg-white/5">
                             {selectedNotMarkedIds.length} selected
                           </Badge>
@@ -1526,7 +1539,41 @@ export function BunkxApp() {
                             </Button>
                           </div>
                         </div>
-                        <ScrollArea className="h-72 rounded-2xl border border-white/10 sm:h-88">
+
+                        <ScrollArea className="h-64 rounded-2xl border border-white/10 sm:hidden">
+                          <div className="space-y-2.5 p-2">
+                            {fetchData.not_marked_rows.map((row) => (
+                              <label
+                                key={row.record_id}
+                                className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/4 p-3"
+                              >
+                                <Checkbox
+                                  className="mt-0.5"
+                                  checked={selectedNotMarkedIds.includes(row.record_id)}
+                                  onCheckedChange={(checked) =>
+                                    toggleNotMarkedRow(row.record_id, Boolean(checked))
+                                  }
+                                />
+                                <div className="min-w-0 space-y-1">
+                                  <p className="text-sm font-medium">
+                                    {row.date || displayDate(row.period_date)}
+                                    {row.session_time ? ` · ${row.session_time}` : ""}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {row.course_code || "Unknown"}
+                                    {row.subject_name ? ` - ${row.subject_name}` : ""}
+                                  </p>
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {row.faculty || "Unknown faculty"}
+                                    {row.faculty_email ? ` · ${row.faculty_email}` : ""}
+                                  </p>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </ScrollArea>
+
+                        <ScrollArea className="hidden h-72 rounded-2xl border border-white/10 sm:block sm:h-88">
                           <Table>
                             <TableHeader>
                               <TableRow className="border-white/10">
@@ -1584,6 +1631,220 @@ export function BunkxApp() {
                     )}
                   </CardContent>
                 </Card>
+              </div>
+
+              <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-background/92 p-3 backdrop-blur supports-backdrop-filter:bg-background/80 sm:hidden">
+                <Button
+                  type="button"
+                  className="h-11 w-full rounded-xl"
+                  onClick={generatePlannerWithFallback}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Spinner className="size-4" />
+                      Generating
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-4" />
+                      Generate
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+                <DialogContent className="glass-panel h-svh w-screen max-w-none overflow-hidden rounded-none border-white/10 bg-card/95 p-0 sm:h-auto sm:max-h-[88svh] sm:w-[min(96vw,68rem)] sm:max-w-6xl sm:rounded-3xl">
+                  <DialogHeader className="border-b border-white/10 px-4 py-4 sm:px-6 sm:py-5">
+                    <DialogTitle className="text-xl">Plan configuration</DialogTitle>
+                    <DialogDescription>
+                      Advanced controls for planner behavior and per-course DL limits.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <ScrollArea className="h-[calc(100svh-5rem)] px-4 py-4 sm:h-auto sm:max-h-[calc(88svh-6rem)] sm:px-6 sm:py-6">
+                    <div className="space-y-4 pb-6 pr-0 sm:space-y-6 sm:pr-2">
+                <Card className="glass-panel rounded-[1.5rem] border-white/10 bg-card/75 sm:rounded-[1.75rem]">
+                    <CardHeader>
+                      <CardTitle className="text-xl">Planner settings</CardTitle>
+                      <CardDescription>
+                        Control the cutoff date, lookback window, and default course cap.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Label>Cutoff date</Label>
+                          <InfoHint text="Only attendance records on or before this date are considered." />
+                        </div>
+                        <DatePickerButton
+                          value={cutoffDate}
+                          onChange={setCutoffDate}
+                          placeholder="Pick a cutoff date"
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Label>Days before event</Label>
+                            <InfoHint text="A leave counts if it falls on the event day or within this many days before it." />
+                          </div>
+                          <Badge variant="outline" className="border-white/10 bg-white/5">
+                            {lookbackDays[0]} days
+                          </Badge>
+                        </div>
+                        <Slider
+                          min={0}
+                          max={14}
+                          step={1}
+                          value={lookbackDays}
+                          onValueChange={setLookbackDays}
+                        />
+                      </div>
+
+                      <Separator className="bg-white/10" />
+
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="default-max-dl">Default max DL per course</Label>
+                          <InfoHint text="Use this to seed new course limits or reapply a common cap across all courses." />
+                        </div>
+                        <div className="grid gap-3 sm:flex sm:flex-row sm:items-center">
+                          <Input
+                            id="default-max-dl"
+                            type="number"
+                            min={0}
+                            max={50}
+                            value={defaultMaxDl}
+                            onChange={(event) =>
+                              setDefaultMaxDl(Number(event.target.value) || 0)
+                            }
+                            className="h-11 border-white/10 bg-white/5 sm:max-w-36"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-11 border-white/10 bg-white/5"
+                            onClick={applyDefaultLimitToAll}
+                          >
+                            Apply to all courses
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                <Card className="glass-panel rounded-[1.5rem] border-white/10 bg-card/75 sm:rounded-[1.75rem]">
+                    <CardHeader>
+                      <CardTitle className="text-xl">Per-course DL limits</CardTitle>
+                      <CardDescription>
+                        Courses with a max DL of zero will be excluded from the plan.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-3 sm:hidden">
+                        {courseLimits.map((limit) => {
+                          const course = courseLookup.get(limit.course_code)
+                          return (
+                            <div
+                              key={limit.course_code}
+                              className="rounded-xl border border-white/10 bg-white/5 p-3"
+                            >
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium">{limit.course_code}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {course?.subject_name || "Unknown subject"}
+                                </p>
+                              </div>
+                              <div className="mt-3 flex items-center gap-2">
+                                <Label htmlFor={`mobile-limit-${limit.course_code}`} className="text-xs text-muted-foreground">
+                                  Max DL
+                                </Label>
+                                <Input
+                                  id={`mobile-limit-${limit.course_code}`}
+                                  type="number"
+                                  min={0}
+                                  max={50}
+                                  value={limit.max_dl}
+                                  onChange={(event) =>
+                                    setCourseLimits((current) =>
+                                      current.map((item) =>
+                                        item.course_code === limit.course_code
+                                          ? {
+                                              ...item,
+                                              max_dl: Math.max(
+                                                0,
+                                                Number(event.target.value) || 0
+                                              ),
+                                            }
+                                          : item
+                                      )
+                                    )
+                                  }
+                                  className="h-10 border-white/10 bg-white/5"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <ScrollArea className="hidden h-80 rounded-2xl border border-white/10 sm:block sm:h-96">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="border-white/10">
+                              <TableHead>Course</TableHead>
+                              <TableHead>Subject</TableHead>
+                              <TableHead className="w-28">Max DL</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {courseLimits.map((limit) => {
+                              const course = courseLookup.get(limit.course_code)
+                              return (
+                                <TableRow
+                                  key={limit.course_code}
+                                  className="border-white/10"
+                                >
+                                  <TableCell className="font-medium">
+                                    {limit.course_code}
+                                  </TableCell>
+                                  <TableCell className="text-muted-foreground">
+                                    {course?.subject_name || "Unknown subject"}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={50}
+                                      value={limit.max_dl}
+                                      onChange={(event) =>
+                                        setCourseLimits((current) =>
+                                          current.map((item) =>
+                                            item.course_code === limit.course_code
+                                              ? {
+                                                  ...item,
+                                                  max_dl: Math.max(
+                                                    0,
+                                                    Number(event.target.value) || 0
+                                                  ),
+                                                }
+                                              : item
+                                          )
+                                        )
+                                      }
+                                      className="h-10 border-white/10 bg-white/5"
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </CardContent>
+                </Card>
 
                     </div>
                   </ScrollArea>
@@ -1612,19 +1873,13 @@ export function BunkxApp() {
                       onValueChange={setMobileResultSection}
                       className="sm:hidden"
                     >
-                      <TabsList className="grid w-full grid-cols-3 bg-background/60">
-                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                      <TabsList className="grid w-full grid-cols-2 bg-background/60">
                         <TabsTrigger value="preview">Preview</TabsTrigger>
                         <TabsTrigger value="export">Export</TabsTrigger>
                       </TabsList>
                     </Tabs>
 
-                    <div
-                      className={cn(
-                        "grid gap-4 sm:grid-cols-2 xl:grid-cols-3",
-                        mobileResultSection !== "overview" && "hidden sm:grid"
-                      )}
-                    >
+                    <div className="hidden sm:grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       <MetricCard
                         label="Recommended Rows"
                         value={plannerResult.summary.recommended_rows}

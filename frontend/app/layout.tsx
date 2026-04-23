@@ -37,13 +37,14 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("dark antialiased", fontSans.variable, fontMono.variable)}
+      className={cn("antialiased", fontSans.variable, fontMono.variable)}
     >
       <body className="min-h-svh bg-background font-sans text-foreground">
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
+          defaultTheme="system"
+          enableSystem
+          enableColorScheme
           disableTransitionOnChange
         >
           <TooltipProvider>
